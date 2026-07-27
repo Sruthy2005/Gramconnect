@@ -1,0 +1,176 @@
+{
+  "nav": {
+    "home": "Home",
+    "report": "Report Issue",
+    "track": "Track Complaint",
+    "hub": "Community Hub",
+    "lost": "Lost & Found",
+    "announcements": "Announcements",
+    "about": "About",
+    "contact": "Contact",
+    "login": "Login",
+    "register": "Register",
+    "tagline": "Stronger Communities, Better Tomorrow"
+  },
+  "hero": {
+    "badge": "AI-Powered Civic Platform",
+    "title_part1": "AI-Powered",
+    "title_part2": "Smart Civic Issue",
+    "title_part3": "Reporting Platform",
+    "desc": "Report local issues, track complaint progress in real-time, and help build smarter Panchayats through digital governance.",
+    "btn_report": "Report Complaint",
+    "btn_track": "Track Complaint",
+    "feat_ai": "AI Powered",
+    "feat_gps": "GPS Enabled",
+    "feat_track": "Real-time Tracking",
+    "feat_analytics": "Smart Analytics",
+    "citizen": "Citizen",
+    "ai_analysis": "AI Analysis",
+    "officer": "Department Officer",
+    "resolved": "Issue Resolved"
+  },
+  "stats": {
+    "total": "Total Complaints",
+    "resolved": "Resolved Complaints",
+    "citizens": "Active Citizens",
+    "depts": "Departments Connected",
+    "month_total": "+12.5% this month",
+    "month_resolved": "+15.3% this month",
+    "month_citizens": "+8.2% this month",
+    "all_panchayats": "Across all Panchayats"
+  },
+  "overview": {
+    "categories_title": "Complaint Categories"
+  },
+  "categories": {
+    "road": "Road Damage",
+    "drainage": "Drainage Issues",
+    "waste": "Waste Management",
+    "water": "Water Leakage",
+    "light": "Street Light",
+    "vegetation": "Roadside Vegetation",
+    "property": "Public Property Damage",
+    "pathway": "Public Pathway Issues",
+    "land": "Puramboke Land Issues",
+    "animal": "Animal-Related Issues"
+  },
+  "why": {
+    "title": "Why Choose GramConnect?",
+    "feat_classification": "AI Complaint Classification",
+    "feat_gps": "GPS Location Detection",
+    "feat_duplicate": "Duplicate Detection",
+    "feat_tracking": "Real-time Tracking",
+    "feat_notify": "Smart Notifications",
+    "feat_governance": "Transparent Governance"
+  },
+  "footer": {
+    "tagline": "Stronger Communities, Better Tomorrow",
+    "desc": "Empowering rural communities with smart, AI-driven civic reporting pipelines to accelerate local governance.",
+    "copyright": "© 2026 GramConnect. All rights reserved. Platform developed under the E-Governance & Rural Digitalization Initiative."
+  },
+  "login": {
+    "welcome_back": "Welcome Back",
+    "sign_in": "Sign in to your account",
+    "subheading": "Continue reporting and tracking civic issues securely.",
+    "email": "Email Address",
+    "password": "Password",
+    "remember_me": "Remember Me",
+    "forgot_password": "Forgot Password?",
+    "login_btn": "Login",
+    "create_account": "Create a new account",
+    "or": "OR",
+    "google_btn": "Continue with Google",
+    "copyright": "© 2026 GramConnect. All rights reserved."
+  },
+  "register": {
+    "welcome_tag": "Create Your Account",
+    "heading": "Join GramConnect",
+    "subheading": "Register to report civic issues, track complaint status, and help build smarter communities.",
+    "name": "Full Name",
+    "email": "Email Address",
+    "phone": "Mobile Number",
+    "password": "Password",
+    "confirm_password": "Confirm Password",
+    "terms": "I agree to the Terms & Conditions and Privacy Policy",
+    "submit_btn": "Create Account",
+    "google_btn": "Continue with Google",
+    "already_have_acc": "Already have an account?",
+    "sign_in_link": "Sign In",
+    "validation": {
+      "required": "This field is required.",
+      "email": "Please enter a valid email address.",
+      "phone": "Please enter a valid 10-digit mobile number.",
+      "password_len": "Password must be at least 8 characters.",
+      "password_match": "Passwords do not match.",
+      "terms": "You must agree to the Terms and Conditions.",
+      "strength_weak": "Weak Password",
+      "strength_medium": "Medium Password",
+      "strength_strong": "Strong Password"
+    }
+  },
+  "forgot_password": {
+    "welcome_tag": "Forgot Password",
+    "heading": "Reset Your Password",
+    "subheading": "Enter your registered email address and we'll send you a secure password reset link.",
+    "email": "Email Address",
+    "submit_btn": "Send Reset Link",
+    "back_to_login": "Back to Login",
+    "or": "OR",
+    "contact_support": "Contact Support",
+    "success_title": "Password Reset Link Sent",
+    "success_desc": "We've sent a password reset link to your registered email address. Please check your inbox and spam folder.",
+    "resend_btn": "Resend Email",
+    "floating_card_1": "Secure Verification",
+    "floating_card_2": "Email Verification",
+    "floating_card_3": "AI Security",
+    "floating_card_4": "Password Reset"
+  },
+  "dashboard": {
+    "welcome": "Welcome",
+    "email": "Registered Email",
+    "mobile": "Mobile Number",
+    "date": "Today's Date",
+    "stats": {
+      "total": "Total Complaints",
+      "pending": "Pending",
+      "in_progress": "In Progress",
+      "resolved": "Resolved"
+    },
+    "menu": {
+      "dashboard": "Dashboard",
+      "report_issue": "Report Issue",
+      "my_complaints": "My Complaints",
+      "complaint_status": "Complaint Status",
+      "community_hub": "Community Hub",
+      "lost_found": "Lost & Found",
+      "announcements": "Announcements",
+      "profile": "Profile",
+      "settings": "Settings",
+      "logout": "Logout",
+      "notifications": "Notifications"
+    },
+    "actions": {
+      "title": "Quick Actions",
+      "report": "Report New Complaint",
+      "track": "Track Complaint",
+      "hub": "Community Hub",
+      "lost_found": "Lost & Found"
+    },
+    "recent_table": {
+      "title": "Recent Complaints",
+      "id": "Complaint ID",
+      "type": "Issue Type",
+      "date": "Date",
+      "status": "Status",
+      "action": "Action",
+      "view": "View",
+      "empty": "You haven't reported any complaints yet."
+    },
+    "announcements_sec": {
+      "title": "Latest Announcements",
+      "a1_title": "Gram Panchayat monthly coordination meeting scheduled for next Monday.",
+      "a2_title": "New solar street lights installation project initiated in Ward 4.",
+      "a3_title": "Drinking water supply pipeline maintenance work in progress near Main Road."
+    }
+  }
+}
