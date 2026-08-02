@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Globe, ChevronDown, User, Cpu, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle, Menu, Bell, PlusCircle, Search, FileText, LayoutDashboard, Megaphone, Settings, LogOut, Calendar, Info } from 'lucide-react';
+import { Globe, ChevronDown, User, Cpu, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle, Menu, Bell, PlusCircle, Search, FileText, LayoutDashboard, Megaphone, Settings, LogOut, Calendar, Info, AlertCircle, Trash2, Check, CheckCheck, ArrowRight } from 'lucide-react';
 import { GramConnectIcon } from './GramConnectLogo';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
@@ -26,6 +26,12 @@ export default function UserDashboard() {
   // Notifications state
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Dedicated notifications page state
+  const [notifFilter, setNotifFilter] = useState('All');
+  const [notifSearchQuery, setNotifSearchQuery] = useState('');
+  const [notifCurrentPage, setNotifCurrentPage] = useState(1);
 
   const dropdownRef = useRef(null);
   const avatarDropdownRef = useRef(null);
@@ -72,19 +78,56 @@ export default function UserDashboard() {
       }
 
       // Fetch in-app notifications
+      setLoadingNotifications(true);
       const notifRes = await api.get('/notifications');
-      if (notifRes.data) {
+      if (notifRes.data && notifRes.data.success) {
         setNotifications(notifRes.data.notifications || []);
-        setUnreadNotificationsCount(notifRes.data.unreadCount || 0);
       }
+
+      const countRes = await api.get('/notifications/unread-count');
+      if (countRes.data && countRes.data.success) {
+        setUnreadNotificationsCount(countRes.data.count || 0);
+      }
+      setLoadingNotifications(false);
     } catch (err) {
       console.warn('[DEV] Failed to load dashboard statistics or notifications:', err);
+      setLoadingNotifications(false);
     }
   };
 
   useEffect(() => {
     fetchDashboardData();
   }, [user, activeTab]);
+
+  // Real-time notifications via SSE
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !user) return;
+
+    const eventSource = new EventSource(`http://localhost:5000/api/notifications/stream?token=${token}`);
+
+    eventSource.addEventListener('notification', (event) => {
+      try {
+        const newNotif = JSON.parse(event.data);
+        setNotifications((prev) => {
+          // Avoid duplicates
+          if (prev.some((n) => n._id === newNotif._id)) return prev;
+          return [newNotif, ...prev];
+        });
+        setUnreadNotificationsCount((prev) => prev + 1);
+      } catch (err) {
+        console.error('[DEV] Failed to parse live SSE notification:', err);
+      }
+    });
+
+    eventSource.addEventListener('error', (event) => {
+      console.warn('[DEV] SSE stream disconnected. Retrying...');
+    });
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -106,6 +149,8 @@ export default function UserDashboard() {
         setActiveTab('lost_found');
       } else if (cleanHash === '#dashboard/announcements') {
         setActiveTab('announcements');
+      } else if (cleanHash === '#dashboard/notifications') {
+        setActiveTab('notifications');
       } else {
         setActiveTab('dashboard');
       }
@@ -119,23 +164,325 @@ export default function UserDashboard() {
   }, []);
 
   // Handle Mark Notifications as Read on toggle
-  const handleToggleNotifications = async () => {
-    const nextState = !notificationsDropdownOpen;
-    setNotificationsDropdownOpen(nextState);
+  const handleToggleNotifications = () => {
+    setNotificationsDropdownOpen(!notificationsDropdownOpen);
+  };
 
-    if (nextState && unreadNotificationsCount > 0) {
-      try {
-        await api.put('/notifications/read');
-        setUnreadNotificationsCount(0);
-      } catch (err) {
-        console.warn('[DEV] Failed to mark notifications as read:', err);
+  const handleMarkAsRead = async (id) => {
+    try {
+      const res = await api.patch(`/notifications/${id}/read`);
+      if (res.data && res.data.success) {
+        setNotifications(prev =>
+          prev.map(n => n._id === id ? { ...n, isRead: true } : n)
+        );
+        setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
       }
+    } catch (err) {
+      console.warn('[DEV] Failed to mark notification as read:', err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const res = await api.patch('/notifications/read-all');
+      if (res.data && res.data.success) {
+        setNotifications(prev =>
+          prev.map(n => ({ ...n, isRead: true }))
+        );
+        setUnreadNotificationsCount(0);
+      }
+    } catch (err) {
+      console.warn('[DEV] Failed to mark all notifications as read:', err);
+    }
+  };
+
+  const handleDeleteNotification = async (id) => {
+    try {
+      const res = await api.delete(`/notifications/${id}`);
+      if (res.data && res.data.success) {
+        const wasUnread = !notifications.find(n => n._id === id)?.isRead;
+        setNotifications(prev => prev.filter(n => n._id !== id));
+        if (wasUnread) {
+          setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
+        }
+      }
+    } catch (err) {
+      console.warn('[DEV] Failed to delete notification:', err);
+    }
+  };
+
+  const handleDeleteAllRead = async () => {
+    if (!window.confirm('Are you sure you want to delete all read notifications?')) return;
+    try {
+      const res = await api.delete('/notifications/delete-read');
+      if (res.data && res.data.success) {
+        setNotifications(prev => prev.filter(n => !n.isRead));
+      }
+    } catch (err) {
+      console.warn('[DEV] Failed to delete read notifications:', err);
     }
   };
 
   const changeLanguage = (lng) => {
     i18n.changeLanguage(lng);
     setLangDropdownOpen(false);
+  };
+
+  // Filtered notifications logic
+  const filteredNotifs = notifications.filter(n => {
+    const matchesSearch = 
+      n.title.toLowerCase().includes(notifSearchQuery.toLowerCase()) ||
+      n.message.toLowerCase().includes(notifSearchQuery.toLowerCase()) ||
+      (n.relatedComplaint && (typeof n.relatedComplaint === 'object' ? n.relatedComplaint.complaintId : n.relatedComplaint).toLowerCase().includes(notifSearchQuery.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    if (notifFilter === 'Unread') return !n.isRead;
+    if (notifFilter === 'Read') return n.isRead;
+    
+    const titleL = n.title.toLowerCase();
+    const msgL = n.message.toLowerCase();
+    
+    if (notifFilter === 'Complaint') {
+      return titleL.includes('complaint') || msgL.includes('complaint') || n.relatedComplaint;
+    }
+    if (notifFilter === 'Announcement') {
+      return titleL.includes('announcement') || msgL.includes('announcement');
+    }
+    if (notifFilter === 'Community') {
+      return titleL.includes('community') || msgL.includes('community') || titleL.includes('post') || msgL.includes('post');
+    }
+    if (notifFilter === 'Lost & Found') {
+      return titleL.includes('lost') || msgL.includes('lost') || titleL.includes('found') || msgL.includes('found') || titleL.includes('claim') || msgL.includes('claim');
+    }
+    if (notifFilter === 'System') {
+      return titleL.includes('system') || msgL.includes('system') || titleL.includes('error') || msgL.includes('error');
+    }
+
+    return true;
+  });
+
+  const notifRowsPerPage = 10;
+  const notifTotalPages = Math.ceil(filteredNotifs.length / notifRowsPerPage) || 1;
+  const indexOfLastNotifRow = notifCurrentPage * notifRowsPerPage;
+  const indexOfFirstNotifRow = indexOfLastNotifRow - notifRowsPerPage;
+  const currentNotifsPage = filteredNotifs.slice(indexOfFirstNotifRow, indexOfLastNotifRow);
+
+  // Dedicated Notifications View
+  const renderNotificationsPage = (isAdmin = false) => {
+    const getNotifIcon = (n) => {
+      const IconComponent = n.type === 'Success' ? CheckCircle 
+                          : n.type === 'Warning' ? AlertTriangle 
+                          : n.type === 'Error' ? AlertCircle 
+                          : Info;
+      const iconColor = n.type === 'Success' ? '#10b981' 
+                      : n.type === 'Warning' ? '#f59e0b' 
+                      : n.type === 'Error' ? '#ef4444' 
+                      : '#3b82f6';
+      return <IconComponent size={20} style={{ color: iconColor }} />;
+    };
+
+    const filterOptions = ['All', 'Unread', 'Read', 'Complaint', 'Announcement', 'Community', 'Lost & Found', 'System'];
+
+    return (
+      <div className="workspace-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid #edf2f7', paddingBottom: '20px' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-dark)' }}>Notifications</h1>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>View and manage all your notifications.</p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              className="admin-btn secondary" 
+              onClick={handleMarkAllAsRead} 
+              disabled={unreadNotificationsCount === 0}
+              style={{ padding: '8px 14px', fontSize: '0.8rem', fontWeight: 700 }}
+            >
+              Mark All as Read
+            </button>
+            <button 
+              className="admin-btn danger" 
+              onClick={handleDeleteAllRead}
+              disabled={!notifications.some(n => n.isRead)}
+              style={{ background: '#ef4444', color: '#fff', padding: '8px 14px', fontSize: '0.8rem', fontWeight: 700, border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              Delete All Read
+            </button>
+          </div>
+        </div>
+
+        {/* Filters & Search */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {filterOptions.map((opt) => (
+              <button
+                key={opt}
+                onClick={() => { setNotifFilter(opt); setNotifCurrentPage(1); }}
+                style={{ 
+                  padding: '6px 12px', 
+                  borderRadius: '20px', 
+                  border: '1px solid',
+                  borderColor: notifFilter === opt ? 'var(--primary)' : '#e2e8f0',
+                  background: notifFilter === opt ? 'var(--primary-light)' : '#ffffff',
+                  color: notifFilter === opt ? 'var(--primary)' : '#64748b',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ position: 'relative', width: '100%', maxWidth: '280px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Search notifications..."
+              value={notifSearchQuery}
+              onChange={(e) => { setNotifSearchQuery(e.target.value); setNotifCurrentPage(1); }}
+              className="admin-input"
+              style={{ paddingLeft: '36px', height: '36px', fontSize: '0.85rem' }}
+            />
+          </div>
+        </div>
+
+        {/* Notifications List */}
+        {loadingNotifications ? (
+          <div style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <span style={{ width: '32px', height: '32px', border: '3px solid var(--primary)', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite', display: 'inline-block' }} />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Loading your notifications...</span>
+          </div>
+        ) : filteredNotifs.length === 0 ? (
+          <div style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+            <span style={{ fontSize: '2.5rem' }}>🔔</span>
+            <h3 style={{ margin: 0, fontWeight: 800, color: 'var(--text-dark)' }}>No Notifications</h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>You're all caught up.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {currentNotifsPage.map((n) => {
+              const compId = n.relatedComplaint ? (typeof n.relatedComplaint === 'object' ? n.relatedComplaint.complaintId : 'Complaint') : null;
+              
+              return (
+                <div
+                  key={n._id}
+                  onClick={() => {
+                    handleMarkAsRead(n._id);
+                    const cleanTitle = n.title.toLowerCase();
+                    const cleanMsg = n.message.toLowerCase();
+                    if (n.relatedComplaint) {
+                      const dbId = typeof n.relatedComplaint === 'object' ? n.relatedComplaint._id : n.relatedComplaint;
+                      window.location.hash = isAdmin 
+                        ? `#admin/complaints/${dbId}`
+                        : `#dashboard/my-complaints?id=${dbId}`;
+                    } else if (cleanTitle.includes('announcement') || cleanMsg.includes('announcement')) {
+                      window.location.hash = isAdmin ? '#admin' : '#dashboard/announcements';
+                    } else if (cleanTitle.includes('community') || cleanMsg.includes('community') || cleanTitle.includes('post') || cleanMsg.includes('post')) {
+                      window.location.hash = isAdmin ? '#admin' : '#dashboard/hub';
+                    } else if (cleanTitle.includes('lost') || cleanMsg.includes('lost') || cleanTitle.includes('found') || cleanMsg.includes('found')) {
+                      window.location.hash = isAdmin ? '#admin' : '#dashboard/lost-found';
+                    } else {
+                      window.location.hash = isAdmin ? '#admin' : '#dashboard';
+                    }
+                  }}
+                  style={{
+                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    border: '1px solid #edf2f7',
+                    background: n.isRead ? '#ffffff' : '#f0fdf4',
+                    display: 'flex',
+                    gap: '16px',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                  }}
+                  className="notification-page-card"
+                >
+                  <div>{getNotifIcon(n)}</div>
+
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-dark)' }}>{n.title}</span>
+                      {!n.isRead && (
+                        <span style={{ width: '6px', height: '6px', background: '#3b82f6', borderRadius: '50%' }} />
+                      )}
+                      {!n.isRead && (
+                        <span style={{ fontSize: '0.65rem', background: '#dbeafe', color: '#1e40af', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                          Unread
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#4b5563', lineHeight: 1.4 }}>{n.message}</p>
+                    
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {compId && (
+                        <span style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
+                          ID: {compId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteNotification(n._id);
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      padding: '8px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.15s ease'
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {filteredNotifs.length > notifRowsPerPage && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px', borderTop: '1px solid #edf2f7', paddingTop: '20px' }}>
+            <button
+              onClick={() => setNotifCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={notifCurrentPage === 1}
+              className="admin-btn secondary"
+              style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+            >
+              Previous
+            </button>
+            <span style={{ alignSelf: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+              Page {notifCurrentPage} of {notifTotalPages}
+            </span>
+            <button
+              onClick={() => setNotifCurrentPage(prev => Math.min(notifTotalPages, prev + 1))}
+              disabled={notifCurrentPage === notifTotalPages}
+              className="admin-btn secondary"
+              style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const getTodayDate = () => {
@@ -180,37 +527,133 @@ export default function UserDashboard() {
               className="btn-nav-action"
               aria-label="View notifications"
               onClick={handleToggleNotifications}
-              style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <Bell size={20} />
               {unreadNotificationsCount > 0 && (
-                <span className="notification-badge" style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ef4444', width: '8px', height: '8px', borderRadius: '50%' }} />
+                <span className="notification-badge" style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: '#ffffff', width: '16px', height: '16px', borderRadius: '50%', fontSize: '0.62rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  {unreadNotificationsCount}
+                </span>
               )}
             </button>
 
             {/* Notifications Dropdown Overlay */}
             {notificationsDropdownOpen && (
-              <div className="notifications-dropdown-menu" style={{ position: 'absolute', top: '48px', right: 0, background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1020, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '280px', maxWidth: '320px' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #edf2f7', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>
-                  Notifications
+              <div className="notifications-dropdown-menu" style={{ position: 'absolute', top: '48px', right: 0, background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1020, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '320px', maxWidth: '360px' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #edf2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-dark)' }}>Notifications</span>
+                  {unreadNotificationsCount > 0 && (
+                    <button 
+                      onClick={handleMarkAllAsRead} 
+                      style={{ fontSize: '0.75rem', color: 'var(--primary)', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      Mark all as read
+                    </button>
+                  )}
                 </div>
-                <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                  {notifications.length === 0 ? (
-                    <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-light)', fontSize: '0.8rem' }}>
-                      No new notifications
+                
+                <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                  {loadingNotifications ? (
+                    <div style={{ padding: '32px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '20px', height: '20px', border: '2px solid var(--primary)', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading notifications...</span>
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div style={{ padding: '32px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle size={32} style={{ color: '#10b981', opacity: 0.8 }} />
+                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>No Notifications Yet</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>You're all caught up.</span>
                     </div>
                   ) : (
-                    notifications.map((n) => (
-                      <div key={n._id} style={{ padding: '12px 16px', borderBottom: '1px solid #edf2f7', display: 'flex', flexDirection: 'column', gap: '4px', background: n.isRead ? 'transparent' : '#f0fdf4', transition: 'all 0.15s ease' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)', fontWeight: n.isRead ? 500 : 700, lineHeight: 1.4 }}>
-                          {n.message}
-                        </span>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                          {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    ))
+                    notifications.slice(0, 8).map((n) => {
+                      const IconComponent = n.type === 'Success' ? CheckCircle 
+                                          : n.type === 'Warning' ? AlertTriangle 
+                                          : n.type === 'Error' ? AlertCircle 
+                                          : Info;
+                      const iconColor = n.type === 'Success' ? '#10b981' 
+                                      : n.type === 'Warning' ? '#f59e0b' 
+                                      : n.type === 'Error' ? '#ef4444' 
+                                      : '#3b82f6';
+                      
+                      return (
+                        <div 
+                          key={n._id} 
+                          onClick={() => {
+                            handleMarkAsRead(n._id);
+                            setNotificationsDropdownOpen(false);
+                            if (n.relatedComplaint) {
+                              const compId = typeof n.relatedComplaint === 'object' ? n.relatedComplaint._id : n.relatedComplaint;
+                              window.location.hash = `#dashboard/my-complaints?id=${compId}`;
+                            }
+                          }}
+                          style={{ 
+                            padding: '12px 16px', 
+                            borderBottom: '1px solid #edf2f7', 
+                            display: 'flex', 
+                            gap: '12px', 
+                            background: n.isRead ? 'transparent' : '#f0fdf4', 
+                            transition: 'all 0.15s ease',
+                            cursor: 'pointer',
+                            alignItems: 'flex-start',
+                            position: 'relative'
+                          }}
+                          className="notification-card-item"
+                        >
+                          <div style={{ marginTop: '2px', color: iconColor }}>
+                            <IconComponent size={16} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, paddingRight: '12px' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)', fontWeight: 700 }}>
+                              {n.title}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.4 }}>
+                              {n.message}
+                            </span>
+                            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                            {!n.isRead && (
+                              <span style={{ width: '6px', height: '6px', background: '#3b82f6', borderRadius: '50%' }} />
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteNotification(n._id);
+                              }}
+                              style={{ 
+                                border: 'none', 
+                                background: 'none', 
+                                color: '#9ca3af', 
+                                cursor: 'pointer',
+                                padding: '2px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                              title="Delete notification"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
+                </div>
+
+                {/* View All Notifications Link */}
+                <div style={{ padding: '10px 16px', borderTop: '1px solid #edf2f7', textAlign: 'center', background: '#f8fafc' }}>
+                  <button
+                    onClick={() => {
+                      window.location.hash = '#dashboard/notifications';
+                      setNotificationsDropdownOpen(false);
+                    }}
+                    style={{ color: 'var(--primary)', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    View All Notifications <ArrowRight size={14} />
+                  </button>
                 </div>
               </div>
             )}
@@ -388,6 +831,8 @@ export default function UserDashboard() {
           <ReportIssuePage onNavigate={(tab) => setActiveTab(tab)} />
         ) : activeTab === 'complaints' || activeTab === 'status' ? (
           <MyComplaintsPage />
+        ) : activeTab === 'notifications' ? (
+          renderNotificationsPage(false)
         ) : (
           <>
             {/* Section 1: Welcome Header Card & Profile Summary Card (Requirement 4) */}

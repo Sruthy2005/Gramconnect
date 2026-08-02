@@ -84,12 +84,20 @@ const complaintSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['Pending', 'In Progress', 'Resolved'],
+      enum: ['Pending', 'Verified', 'Assigned', 'In Progress', 'Resolved', 'Rejected'],
       default: 'Pending'
     },
     assignedDepartment: {
       type: String,
       default: 'Not Assigned'
+    },
+    assignedOfficer: {
+      type: String,
+      default: ''
+    },
+    dueDate: {
+      type: String,
+      default: ''
     },
     priority: {
       type: String,

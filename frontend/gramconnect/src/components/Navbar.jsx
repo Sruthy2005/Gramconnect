@@ -73,8 +73,8 @@ export default function Navbar() {
           <ul className="nav-links">
             {navItems.map((item) => (
               <li key={item.key}>
-                <a 
-                  href={item.href} 
+                <a
+                  href={item.href}
                   className="nav-item-link"
                   onClick={(e) => handleNavItemClick(e, item)}
                 >

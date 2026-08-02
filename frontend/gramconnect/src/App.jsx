@@ -6,6 +6,7 @@ import RegisterPage from './components/RegisterPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import UserDashboard from './components/UserDashboard';
+import AdminDashboard from './components/AdminDashboard';
 
 export default function App() {
   const [route, setRoute] = useState(window.location.hash);
@@ -16,6 +17,15 @@ export default function App() {
     if (window.location.pathname.startsWith('/dashboard')) {
       const subpath = window.location.pathname.substring(10); // e.g. "/report-issue"
       const targetHash = `#dashboard${subpath}`;
+      window.history.replaceState(null, '', `/${targetHash}`);
+      setRoute(targetHash);
+    } else if (window.location.pathname.startsWith('/admin/complaints')) {
+      const subpath = window.location.pathname.substring(17);
+      const targetHash = subpath ? `#admin/complaints${subpath}` : '#admin/complaints';
+      window.history.replaceState(null, '', `/${targetHash}`);
+      setRoute(targetHash);
+    } else if (window.location.pathname.startsWith('/admin/dashboard') || window.location.pathname === '/admin') {
+      const targetHash = '#admin';
       window.history.replaceState(null, '', `/${targetHash}`);
       setRoute(targetHash);
     }
@@ -30,18 +40,33 @@ export default function App() {
     };
   }, []);
 
-  // Central Auth Routing Protection (Requirement 3, 4, 5)
+  // Central Auth Routing Protection (Requirement 3, 4, 5 & Admin Role Guard)
   useEffect(() => {
     if (!loading) {
       if (user) {
-        // Authenticated: Prevent viewing auth pages (login, register, forgot-password)
+        const isAdmin = user.role && (user.role.toLowerCase() === 'admin');
+
+        // Authenticated: Prevent viewing auth pages
         if (route === '#login' || route === '#register' || route === '#forgot-password') {
-          window.location.replace('/#dashboard');
+          const dest = isAdmin ? 'admin/dashboard' : 'dashboard';
+          window.location.replace(`/${dest}`);
+          setRoute(isAdmin ? '#admin' : '#dashboard');
+        }
+
+        // Citizens should not access admin section
+        if (route.startsWith('#admin') && !isAdmin) {
+          window.location.replace('/dashboard');
           setRoute('#dashboard');
         }
+
+        // Admins should navigate to admin workspace
+        if (route.startsWith('#dashboard') && isAdmin) {
+          window.location.replace('/admin/dashboard');
+          setRoute('#admin');
+        }
       } else {
-        // Unauthenticated: Prevent viewing protected pages (dashboard and its subpaths)
-        if (route.startsWith('#dashboard')) {
+        // Unauthenticated: Prevent viewing protected pages
+        if (route.startsWith('#dashboard') || route.startsWith('#admin')) {
           window.location.replace('/#login');
           setRoute('#login');
         }
@@ -72,6 +97,10 @@ export default function App() {
 
   if (route.startsWith('#dashboard')) {
     return <UserDashboard />;
+  }
+
+  if (route.startsWith('#admin')) {
+    return <AdminDashboard />;
   }
 
   return <LandingPage />;

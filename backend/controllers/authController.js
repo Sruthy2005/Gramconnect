@@ -7,6 +7,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { OAuth2Client } = require('google-auth-library');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const { createNotification } = require('../utils/notificationHelper');
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
@@ -51,6 +52,14 @@ const registerUser = asyncHandler(async (req, res) => {
 
   if (user) {
     const token = generateToken(res, user._id);
+
+    // Trigger "New User Registered" admin notification
+    await createNotification({
+      recipientRole: 'admin',
+      title: 'New User Registered',
+      message: `New user profile created: "${user.fullName}" (${user.email}).`,
+      type: 'Information'
+    });
 
     res.status(201).json({
       _id: user._id,
@@ -137,7 +146,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
 
   if (user) {
     user.fullName = req.body.fullName || user.fullName;
-    
+
     if (req.body.email && req.body.email !== user.email) {
       if (!validateEmail(req.body.email)) {
         return res.status(400).json({ message: 'Please provide a valid email address' });
@@ -252,7 +261,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     .digest('hex');
 
   user.passwordResetOtp = hashedOtp;
-  
+
   // Set expiry to 10 minutes (Requirement 1)
   user.passwordResetOtpExpires = Date.now() + 10 * 60 * 1000;
 

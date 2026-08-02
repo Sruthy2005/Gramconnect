@@ -90,11 +90,12 @@ export default function LoginPage() {
     try {
       const response = await api.post('/auth/login', { email, password });
       localStorage.setItem('token', response.data.token);
-      await fetchProfile();
+      const profile = await fetchProfile();
       setIsLoading(false);
       showToast('Login Successful!', 'success');
       setTimeout(() => {
-        window.location.hash = getRedirectDestination();
+        const isAdmin = profile && profile.role && (profile.role.toLowerCase() === 'admin');
+        window.location.replace(isAdmin ? '/admin/dashboard' : '/dashboard');
       }, 1000);
     } catch (err) {
       setIsLoading(false);
@@ -138,11 +139,12 @@ export default function LoginPage() {
 
       console.log('[DEV] Backend authenticated successfully. Storing session JWT and redirecting...');
       localStorage.setItem('token', response.data.token);
-      await fetchProfile();
+      const profile = await fetchProfile();
       setIsLoading(false);
       showToast('Login Successful!', 'success');
       setTimeout(() => {
-        window.location.hash = getRedirectDestination();
+        const isAdmin = profile && profile.role && (profile.role.toLowerCase() === 'admin');
+        window.location.replace(isAdmin ? '/admin/dashboard' : '/dashboard');
       }, 1000);
     } catch (err) {
       setIsLoading(false);

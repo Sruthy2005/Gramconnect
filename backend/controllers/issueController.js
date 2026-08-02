@@ -1,6 +1,7 @@
 const Complaint = require('../models/Complaint');
 const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
+const { createNotification } = require('../utils/notificationHelper');
 
 // Category to Department mapping
 const categoryDepartmentMap = {
@@ -59,14 +60,14 @@ const createComplaint = asyncHandler(async (req, res) => {
 
   // Map Category to Assigned Department & AI Severity
   const departmentName = categoryDepartmentMap[category] || 'General Panchayat Administration';
-  
+
   // Simulated AI Severity and Priority logic
   const isUrgent = urgent === 'true' || urgent === true;
   let severity = 'Low';
   let priorityLevel = 'Normal';
 
   const emergencyKeywords = ['danger', 'emergency', 'fire', 'flood', 'accident', 'injured', 'broken wire', 'short circuit'];
-  const hasEmergencyKeywords = emergencyKeywords.some(keyword => 
+  const hasEmergencyKeywords = emergencyKeywords.some(keyword =>
     description.toLowerCase().includes(keyword) || title.toLowerCase().includes(keyword)
   );
 
@@ -119,11 +120,35 @@ const createComplaint = asyncHandler(async (req, res) => {
     aiSeverity: severity
   });
 
-  // Create In-App Notification (Requirement 8/14)
-  await Notification.create({
-    user: req.user._id,
-    message: `Your complaint ${complaintCode} has been submitted successfully.`
+  // Create In-App Citizen Notification (Complaint Submitted)
+  await createNotification({
+    recipientUser: req.user._id,
+    recipientRole: 'citizen',
+    title: 'Complaint Submitted',
+    message: `Your complaint "${complaint.title}" (${complaint.complaintId}) has been submitted successfully.`,
+    type: 'Success',
+    relatedComplaint: complaint._id
   });
+
+  // Create Admin Notification (New Complaint Submitted)
+  await createNotification({
+    recipientRole: 'admin',
+    title: 'New Complaint Submitted',
+    message: `A new civic report "${complaint.title}" (${complaint.complaintId}) has been registered.`,
+    type: 'Information',
+    relatedComplaint: complaint._id
+  });
+
+  // Create Admin Notification if Urgent
+  if (complaint.urgent || complaint.priority === 'Urgent') {
+    await createNotification({
+      recipientRole: 'admin',
+      title: 'Urgent Complaint Submitted',
+      message: `URGENT: A critical severity report "${complaint.title}" (${complaint.complaintId}) was filed.`,
+      type: 'Warning',
+      relatedComplaint: complaint._id
+    });
+  }
 
   res.status(201).json({
     success: true,

@@ -87,6 +87,26 @@ export default function MyComplaintsPage() {
     fetchComplaints();
   }, []);
 
+  useEffect(() => {
+    const handleHashCheck = () => {
+      const hash = window.location.hash;
+      if (hash.includes('?id=')) {
+        const id = hash.split('?id=')[1];
+        if (id && complaints.length > 0) {
+          const matched = complaints.find(c => c._id === id || c.complaintId === id);
+          if (matched) {
+            setSelectedComplaint(matched);
+          }
+        }
+      }
+    };
+    handleHashCheck();
+    window.addEventListener('hashchange', handleHashCheck);
+    return () => {
+      window.removeEventListener('hashchange', handleHashCheck);
+    };
+  }, [complaints]);
+
   const handleCancelComplaint = async (id, e) => {
     if (e) e.stopPropagation(); // Prevent opening detail modal
     if (!window.confirm('Are you sure you want to cancel this complaint?')) return;

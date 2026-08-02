@@ -14,7 +14,7 @@ export default function HeroSection() {
             <Sparkles size={14} className="ai-badge-icon" />
             <span>{t('hero.badge')}</span>
           </div>
-          
+
           <h1 className="hero-title">
             <span className="text-gradient-green">{t('hero.title_part1')}</span>
             <span>{t('hero.title_part2')}</span>
@@ -68,9 +68,9 @@ export default function HeroSection() {
         <div className="hero-right">
           <div className="illustration-card">
             {/* SVG Scenery Background */}
-            <svg 
-              viewBox="0 0 500 500" 
-              className="kerala-scenery-bg" 
+            <svg
+              viewBox="0 0 500 500"
+              className="kerala-scenery-bg"
               xmlns="http://www.w3.org/2000/svg"
             >
               <defs>
@@ -150,32 +150,32 @@ export default function HeroSection() {
               </g>
 
               {/* Curved Dotted Flow Arrows */}
-              <path 
-                d="M 120 120 Q 250 80 380 120" 
-                fill="none" 
-                stroke="#16a34a" 
-                strokeWidth="2.5" 
+              <path
+                d="M 120 120 Q 250 80 380 120"
+                fill="none"
+                stroke="#16a34a"
+                strokeWidth="2.5"
                 className="dotted-connector"
               />
-              <path 
-                d="M 380 160 Q 450 250 380 340" 
-                fill="none" 
-                stroke="#2563eb" 
-                strokeWidth="2.5" 
+              <path
+                d="M 380 160 Q 450 250 380 340"
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="2.5"
                 className="dotted-connector"
               />
-              <path 
-                d="M 380 380 Q 250 420 120 380" 
-                fill="none" 
-                stroke="#16a34a" 
-                strokeWidth="2.5" 
+              <path
+                d="M 380 380 Q 250 420 120 380"
+                fill="none"
+                stroke="#16a34a"
+                strokeWidth="2.5"
                 className="dotted-connector"
               />
-              <path 
-                d="M 120 340 Q 50 250 120 160" 
-                fill="none" 
-                stroke="#2563eb" 
-                strokeWidth="2.5" 
+              <path
+                d="M 120 340 Q 50 250 120 160"
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="2.5"
                 className="dotted-connector"
               />
 
@@ -187,24 +187,24 @@ export default function HeroSection() {
                 <rect x="0" y="0" width="100" height="190" rx="18" fill="url(#phoneGrad)" stroke="#374151" strokeWidth="3" />
                 {/* Screen */}
                 <rect x="5" y="5" width="90" height="180" rx="14" fill="#ffffff" />
-                
+
                 {/* Notch */}
                 <path d="M 30 5 L 70 5 Q 65 14 50 14 Q 35 14 30 5" fill="url(#phoneGrad)" />
-                
+
                 {/* Screen Content Graphic - Mock Issue Report Screen */}
                 <rect x="12" y="25" width="76" height="30" rx="6" fill="rgba(22, 163, 74, 0.1)" />
                 <circle cx="24" cy="40" r="8" fill="#16a34a" opacity="0.8" />
                 <path d="M 21 40 L 23 42 L 27 38" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-                
+
                 <rect x="38" y="32" width="42" height="6" rx="3" fill="#16a34a" opacity="0.6" />
                 <rect x="38" y="42" width="28" height="4" rx="2" fill="#94a3b8" />
-                
+
                 {/* Loading/Scanning Grid */}
                 <rect x="12" y="65" width="76" height="70" rx="6" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
                 <circle cx="50" cy="100" r="22" fill="none" stroke="#2563eb" strokeWidth="1.5" strokeDasharray="4 2" />
                 <circle cx="50" cy="100" r="14" fill="none" stroke="#16a34a" strokeWidth="1.5" />
                 <path d="M 45 100 L 49 104 L 56 96" fill="none" stroke="#16a34a" strokeWidth="2" />
-                
+
                 {/* AI Text Box */}
                 <rect x="12" y="145" width="76" height="30" rx="6" fill="url(#phoneGrad)" />
                 <text x="50" y="164" fill="#ffffff" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="var(--font-sans)">AI CONFIRMED</text>
@@ -213,8 +213,8 @@ export default function HeroSection() {
 
             {/* Absolute Overlay Nodes for HTML presentation */}
             {/* Citizen Node */}
-            <div 
-              className="glass-card node-glow-green" 
+            <div
+              className="glass-card node-glow-green"
               style={{
                 position: 'absolute',
                 top: '40px',
@@ -236,8 +236,8 @@ export default function HeroSection() {
             </div>
 
             {/* AI Analysis Node */}
-            <div 
-              className="glass-card node-glow-blue" 
+            <div
+              className="glass-card node-glow-blue"
               style={{
                 position: 'absolute',
                 top: '40px',
@@ -259,8 +259,8 @@ export default function HeroSection() {
             </div>
 
             {/* Department Officer Node */}
-            <div 
-              className="glass-card node-glow-green" 
+            <div
+              className="glass-card node-glow-green"
               style={{
                 position: 'absolute',
                 bottom: '80px',
@@ -282,8 +282,8 @@ export default function HeroSection() {
             </div>
 
             {/* Issue Resolved Node */}
-            <div 
-              className="glass-card node-glow-blue" 
+            <div
+              className="glass-card node-glow-blue"
               style={{
                 position: 'absolute',
                 bottom: '80px',
