@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe, ChevronDown, User, Cpu, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Sparkles } from 'lucide-react';
-import { GoogleLogin } from '@react-oauth/google';
-import { GramConnectIcon } from './GramConnectLogo';
 import { useAuth } from '../context/AuthContext';
+import { GramConnectIcon } from './GramConnectLogo';
 import api from '../utils/api';
 import { getRedirectDestination } from '../utils/authNavigation';
 import './LoginPage.css';
@@ -73,6 +72,40 @@ export default function LoginPage() {
     } else {
       console.log(`[DEV] Google Client ID loaded: "${clientId}"`);
     }
+  }, []);
+
+  // Handle GSI button rendering and callback binding
+  useEffect(() => {
+    let checkInterval;
+    const renderGoogleBtn = () => {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        clearInterval(checkInterval);
+        console.log('[DEV] Rendering Google Sign-In button...');
+        window.google.accounts.id.renderButton(
+          document.getElementById('google-signin-button-login'),
+          {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            shape: 'rectangular',
+            width: '400'
+          }
+        );
+      }
+    };
+
+    renderGoogleBtn();
+    checkInterval = setInterval(renderGoogleBtn, 100);
+
+    window.handleGoogleLoginSuccess = (response) => {
+      console.log('[DEV] LoginPage received GSI success credential.');
+      handleGoogleSuccess(response);
+    };
+
+    return () => {
+      clearInterval(checkInterval);
+      window.handleGoogleLoginSuccess = null;
+    };
   }, []);
 
   const changeLanguage = (lng) => {
@@ -549,15 +582,7 @@ export default function LoginPage() {
               <span>{t('login.google_btn')}</span>
             </button>
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.01, overflow: 'hidden', zIndex: 10 }}>
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                type="standard"
-                theme="outline"
-                size="large"
-                shape="rectangular"
-                width="400"
-              />
+              <div id="google-signin-button-login" style={{ width: '100%', height: '100%' }}></div>
             </div>
           </div>
 

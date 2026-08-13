@@ -162,11 +162,11 @@ export default function ReportIssuePage({ onNavigate }) {
     // 3. Extract District
     const rawDistrict = address.district || address.state_district || address.county || '';
     const cleanDistrict = String(rawDistrict).replace(/\s*district\s*/gi, '').trim();
-    
+
     let matchedDistrict = '';
     if (cleanDistrict) {
-      matchedDistrict = districts.find(d => 
-        d.toLowerCase() === cleanDistrict.toLowerCase() || 
+      matchedDistrict = districts.find(d =>
+        d.toLowerCase() === cleanDistrict.toLowerCase() ||
         cleanDistrict.toLowerCase().includes(d.toLowerCase()) ||
         d.toLowerCase().includes(cleanDistrict.toLowerCase())
       );
@@ -181,11 +181,11 @@ export default function ReportIssuePage({ onNavigate }) {
     // 4. Extract Taluk / Subdistrict
     const rawTaluk = address.subdistrict || address.taluk || address.county || '';
     const cleanTaluk = String(rawTaluk).replace(/\s*taluk\s*/gi, '').trim();
-    
+
     let matchedTaluk = '';
     if (matchedDistrict && locationData[matchedDistrict]) {
       const taluksList = Object.keys(locationData[matchedDistrict].Taluks);
-      matchedTaluk = taluksList.find(t => 
+      matchedTaluk = taluksList.find(t =>
         t.toLowerCase() === cleanTaluk.toLowerCase() ||
         cleanTaluk.toLowerCase().includes(t.toLowerCase()) ||
         t.toLowerCase().includes(cleanTaluk.toLowerCase())
@@ -200,7 +200,7 @@ export default function ReportIssuePage({ onNavigate }) {
 
     // 5. Extract Locality / Local Body
     const extractedLocality = address.locality || address.sublocality || address.neighbourhood || address.neighborhood || address.suburb || address.city_district || address.quarter || '';
-    
+
     let matchedLocalBody = '';
     let localBodiesList = [];
     if (matchedDistrict && matchedTaluk && locationData[matchedDistrict] && locationData[matchedDistrict].Taluks[matchedTaluk]) {
@@ -222,7 +222,7 @@ export default function ReportIssuePage({ onNavigate }) {
     const potentialVillage = address.village || address.hamlet || '';
     const potentialCity = address.city || address.town || address.municipality || '';
     const potentialSuburb = address.suburb || address.neighbourhood || address.neighborhood || address.locality || '';
-    
+
     const finalCity = potentialVillage || potentialCity || potentialSuburb || '';
     if (finalCity) {
       setCity(finalCity);
@@ -463,7 +463,7 @@ export default function ReportIssuePage({ onNavigate }) {
         const lng = position.coords.longitude;
         setLatitude(lat.toFixed(6));
         setLongitude(lng.toFixed(6));
-        
+
         // Fetch address for current location and autofill (Requirement 4)
         fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
           .then(res => res.json())
@@ -489,7 +489,7 @@ export default function ReportIssuePage({ onNavigate }) {
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
-    
+
     // Check up to 5 total images limit
     if (images.length + files.length > 5) {
       showToast('You can upload a maximum of 5 images.', 'error');
@@ -502,7 +502,7 @@ export default function ReportIssuePage({ onNavigate }) {
         showToast(`Image ${file.name} exceeds 5MB size limit.`, 'error');
         return;
       }
-      
+
       // Validate file format
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
       if (!validTypes.includes(file.type)) {
@@ -540,7 +540,7 @@ export default function ReportIssuePage({ onNavigate }) {
     }
 
     setFormSubmitting(true);
-    
+
     // Build multipart/form-data payload (Requirement 13)
     const formData = new FormData();
     formData.append('title', title.trim());
@@ -625,7 +625,7 @@ export default function ReportIssuePage({ onNavigate }) {
         {/* Left Column: Input Forms */}
         <div className="report-form-inputs glass-card">
           <h3 className="form-card-title">Basic Information</h3>
-          
+
           <div className="input-field-group">
             <label className="input-label" htmlFor="issue-title">Issue Title <span className="req">*</span></label>
             <input
@@ -724,7 +724,7 @@ export default function ReportIssuePage({ onNavigate }) {
                 required
               />
               {districtDropdownOpen && (
-                <div 
+                <div
                   className="district-dropdown-menu"
                   style={{
                     position: 'absolute',
@@ -822,7 +822,7 @@ export default function ReportIssuePage({ onNavigate }) {
                 required
               />
               {district && locationData[district] && talukDropdownOpen && (
-                <div 
+                <div
                   className="district-dropdown-menu"
                   style={{
                     position: 'absolute',
@@ -914,7 +914,7 @@ export default function ReportIssuePage({ onNavigate }) {
                 required
               />
               {district && taluk && locationData[district] && locationData[district].Taluks[taluk] && localBodyDropdownOpen && (
-                <div 
+                <div
                   className="district-dropdown-menu"
                   style={{
                     position: 'absolute',
@@ -1025,7 +1025,7 @@ export default function ReportIssuePage({ onNavigate }) {
 
         {/* Right Column: Files & Geolocation */}
         <div className="report-form-aside">
-          
+
           {/* Coordinates & Map Preview (Requirement 1, 2, 3, 4, 5) */}
           <div className="report-aside-card glass-card">
             <h3 className="form-card-title">Issue Location</h3>
@@ -1035,36 +1035,36 @@ export default function ReportIssuePage({ onNavigate }) {
 
             {/* Location Method Selection Buttons (Requirement 2) */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-              <button 
-                type="button" 
-                onClick={() => setLocationMethod('gps')} 
-                style={{ 
-                  flex: 1, 
-                  padding: '8px', 
-                  borderRadius: '8px', 
-                  border: '1px solid ' + (locationMethod === 'gps' ? 'var(--primary)' : '#cbd5e1'), 
-                  background: locationMethod === 'gps' ? 'var(--primary-light)' : 'transparent', 
-                  color: locationMethod === 'gps' ? 'var(--primary)' : 'var(--text-dark)', 
-                  fontWeight: 600, 
-                  fontSize: '0.75rem', 
+              <button
+                type="button"
+                onClick={() => setLocationMethod('gps')}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: '1px solid ' + (locationMethod === 'gps' ? 'var(--primary)' : '#cbd5e1'),
+                  background: locationMethod === 'gps' ? 'var(--primary-light)' : 'transparent',
+                  color: locationMethod === 'gps' ? 'var(--primary)' : 'var(--text-dark)',
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
               >
                 Use Current Location (GPS)
               </button>
-              <button 
-                type="button" 
-                onClick={() => setLocationMethod('map')} 
-                style={{ 
-                  flex: 1, 
-                  padding: '8px', 
-                  borderRadius: '8px', 
-                  border: '1px solid ' + (locationMethod === 'map' ? 'var(--primary)' : '#cbd5e1'), 
-                  background: locationMethod === 'map' ? 'var(--primary-light)' : 'transparent', 
-                  color: locationMethod === 'map' ? 'var(--primary)' : 'var(--text-dark)', 
-                  fontWeight: 600, 
-                  fontSize: '0.75rem', 
+              <button
+                type="button"
+                onClick={() => setLocationMethod('map')}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: '1px solid ' + (locationMethod === 'map' ? 'var(--primary)' : '#cbd5e1'),
+                  background: locationMethod === 'map' ? 'var(--primary-light)' : 'transparent',
+                  color: locationMethod === 'map' ? 'var(--primary)' : 'var(--text-dark)',
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
@@ -1086,13 +1086,13 @@ export default function ReportIssuePage({ onNavigate }) {
               /* Search box and leaflet map container */
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                  <input 
-                    type="text" 
-                    className="report-input" 
+                  <input
+                    type="text"
+                    className="report-input"
                     style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem' }}
-                    placeholder="Search place, road, landmark..." 
-                    value={mapSearchQuery} 
-                    onChange={(e) => setMapSearchQuery(e.target.value)} 
+                    placeholder="Search place, road, landmark..."
+                    value={mapSearchQuery}
+                    onChange={(e) => setMapSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -1100,18 +1100,18 @@ export default function ReportIssuePage({ onNavigate }) {
                       }
                     }}
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={handleMapSearch}
-                    style={{ 
-                      padding: '8px 16px', 
-                      background: 'var(--primary)', 
-                      color: '#ffffff', 
-                      border: 'none', 
-                      borderRadius: '8px', 
-                      fontWeight: 600, 
-                      fontSize: '0.8rem', 
-                      cursor: 'pointer' 
+                    style={{
+                      padding: '8px 16px',
+                      background: 'var(--primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer'
                     }}
                   >
                     Search
@@ -1153,11 +1153,11 @@ export default function ReportIssuePage({ onNavigate }) {
             {landmark && (
               <div className="input-field-group" style={{ marginTop: '12px' }}>
                 <label className="input-label">Full Address</label>
-                <textarea 
-                  className="report-textarea" 
-                  style={{ minHeight: '60px', fontSize: '0.75rem', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#4b5563', padding: '8px 12px' }} 
-                  value={landmark} 
-                  readOnly 
+                <textarea
+                  className="report-textarea"
+                  style={{ minHeight: '60px', fontSize: '0.75rem', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#4b5563', padding: '8px 12px' }}
+                  value={landmark}
+                  readOnly
                 />
               </div>
             )}
@@ -1229,9 +1229,9 @@ export default function ReportIssuePage({ onNavigate }) {
 
           {/* Form Actions */}
           <div className="form-action-buttons">
-            <button 
-              type="button" 
-              className="btn-cancel-report" 
+            <button
+              type="button"
+              className="btn-cancel-report"
               onClick={() => onNavigate('dashboard')}
               disabled={formSubmitting}
             >

@@ -11,7 +11,8 @@ const createNotification = async ({
   message,
   type = 'Information',
   relatedComplaint = null,
-  relatedAnnouncement = null
+  relatedAnnouncement = null,
+  districtTarget = 'ALL'
 }) => {
   try {
     const notification = await Notification.create({
@@ -21,7 +22,8 @@ const createNotification = async ({
       message,
       type,
       relatedComplaint,
-      relatedAnnouncement
+      relatedAnnouncement,
+      districtTarget
     });
 
     // Populate related complaint details if available
@@ -41,14 +43,21 @@ const createNotification = async ({
         isRecipient = true;
       }
 
-      // Match recipient role if recipientUser is NOT specified
+      // Match recipient role and district targeting if recipientUser is NOT specified
       if (!recipientUser) {
         const matchesRole = (
           recipientRole.toLowerCase() === client.role ||
           (recipientRole.toLowerCase() === 'admin' && client.role === 'admin') ||
           (recipientRole.toLowerCase() === 'citizen' && client.role === 'citizen')
         );
-        if (matchesRole) {
+
+        const matchesDistrict = (
+          !districtTarget ||
+          districtTarget === 'ALL' ||
+          client.district === districtTarget
+        );
+
+        if (matchesRole && matchesDistrict) {
           isRecipient = true;
         }
       }

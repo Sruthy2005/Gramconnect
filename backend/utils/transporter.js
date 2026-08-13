@@ -26,18 +26,6 @@ if (emailUser && emailPass) {
       });
     } else {
       console.log('SMTP Authentication Successful');
-
-      // Test email delivery (Requirement 13)
-      transporter.sendMail({
-        from: `"GramConnect Support" <${emailUser}>`,
-        to: emailUser,
-        subject: 'GramConnect SMTP Verification Connection',
-        text: 'SMTP connection and authentication verified successfully.'
-      }).then(() => {
-        console.log(`[SMTP Diagnostic] Startup verification test email delivered to ${emailUser}`);
-      }).catch(sendErr => {
-        console.error('[SMTP Diagnostic] Test email delivery failed:', sendErr.message);
-      });
     }
   });
 }

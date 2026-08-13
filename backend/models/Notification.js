@@ -37,6 +37,10 @@ const notificationSchema = new mongoose.Schema(
     isRead: {
       type: Boolean,
       default: false
+    },
+    districtTarget: {
+      type: String,
+      default: 'ALL'
     }
   },
   {

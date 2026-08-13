@@ -213,12 +213,34 @@ const getAdminStats = asyncHandler(async (req, res) => {
   const total = await Complaint.countDocuments();
   const pending = await Complaint.countDocuments({ status: 'Pending' });
   const verified = await Complaint.countDocuments({ status: 'Verified' });
+  const assigned = await Complaint.countDocuments({ status: 'Assigned' });
   const inProgress = await Complaint.countDocuments({ status: 'In Progress' });
   const resolved = await Complaint.countDocuments({ status: 'Resolved' });
   const rejected = await Complaint.countDocuments({ status: 'Rejected' });
   const activeUsers = await User.countDocuments();
 
+  // Dynamic Departments count based on unique routed departments or categories map
+  const uniqueDepts = await Complaint.distinct('assignedDepartment');
+  const activeDepts = uniqueDepts.filter(d => d && d !== 'Not Assigned' && d !== 'Not Routed');
+  const departmentsCount = Math.max(activeDepts.length, 10); // Standard Panchayat has 10 core sections/departments
+
   // Category distribution
+  const categoryData = await Complaint.aggregate([
+    {
+      $group: {
+        _id: '$category',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const countMap = {};
+  categoryData.forEach(item => {
+    if (item._id) {
+      countMap[item._id] = item.count;
+    }
+  });
+
   const categories = [
     'Road Damage',
     'Garbage',
@@ -231,22 +253,132 @@ const getAdminStats = asyncHandler(async (req, res) => {
     'Environment',
     'Other'
   ];
-  
-  const categoryStats = [];
-  for (const cat of categories) {
-    const count = await Complaint.countDocuments({ category: cat });
-    categoryStats.push({ category: cat, count });
+
+  const categoryStats = categories.map(cat => ({
+    category: cat,
+    count: countMap[cat] || 0
+  }));
+
+  // Sort descending so the top categories are displayed first
+  categoryStats.sort((a, b) => b.count - a.count);
+
+  // Monthly trends (dynamically fetch last 6 months from database)
+  const complaintTrends = [];
+  const currentDate = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const monthName = d.toLocaleString('en-US', { month: 'short' });
+    
+    const startOfMonth = new Date(year, month, 1);
+    const endOfMonth = new Date(year, month + 1, 1);
+    
+    const count = await Complaint.countDocuments({
+      createdAt: {
+        $gte: startOfMonth,
+        $lt: endOfMonth
+      }
+    });
+    
+    complaintTrends.push({ month: monthName, count });
   }
 
-  // Monthly trends (aggregate from database or realistic projection)
-  const complaintTrends = [
-    { month: 'Feb', count: 12 },
-    { month: 'Mar', count: 18 },
-    { month: 'Apr', count: 24 },
-    { month: 'May', count: 20 },
-    { month: 'Jun', count: 28 },
-    { month: 'Jul', count: total || 32 }
+  // Daily trends (dynamically fetch last 7 days from database)
+  const dailyTrends = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dayLabel = d.toLocaleString('en-US', { weekday: 'short' });
+    
+    const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    
+    const count = await Complaint.countDocuments({
+      createdAt: {
+        $gte: startOfDay,
+        $lt: endOfDay
+      }
+    });
+    
+    dailyTrends.push({ day: dayLabel, count });
+  }
+
+  // Location Analytics (Top 5 locations/cities with highest complaints count)
+  const locationStatsRaw = await Complaint.aggregate([
+    {
+      $group: {
+        _id: '$city',
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $sort: { count: -1 }
+    },
+    {
+      $limit: 5
+    }
+  ]);
+
+  const topLocations = locationStatsRaw.map(item => ({
+    location: item._id || 'General Ward',
+    count: item.count
+  }));
+
+  // Department-wise SLA & routing performance
+  const deptPerformanceRaw = await Complaint.aggregate([
+    {
+      $group: {
+        _id: '$assignedDepartment',
+        total: { $sum: 1 },
+        resolved: {
+          $sum: { $cond: [{ $eq: ['$status', 'Resolved'] }, 1, 0] }
+        },
+        pending: {
+          $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
+        }
+      }
+    }
+  ]);
+
+  const departmentsList = [
+    'Public Works Department (PWD)',
+    'Sanitation Department',
+    'Water Authority',
+    'Sewerage & Drainage Board',
+    'Electricity & Street Light Section',
+    'State Power Corporation',
+    'Local Police Department',
+    'Traffic Police Section',
+    'Health & Environment Department',
+    'General Panchayat Administration'
   ];
+
+  const performanceMap = {};
+  deptPerformanceRaw.forEach(item => {
+    if (item._id && item._id !== 'Not Assigned') {
+      performanceMap[item._id] = {
+        total: item.total,
+        resolved: item.resolved,
+        pending: item.pending
+      };
+    }
+  });
+
+  const departmentPerformance = departmentsList.map(dept => {
+    const data = performanceMap[dept] || { total: 0, resolved: 0, pending: 0 };
+    const successRate = data.total > 0 ? Math.round((data.resolved / data.total) * 100) : 0;
+    return {
+      department: dept,
+      total: data.total,
+      resolved: data.resolved,
+      pending: data.pending,
+      successRate
+    };
+  });
+
+  // Sort by total complaints assigned descending
+  departmentPerformance.sort((a, b) => b.total - a.total);
 
   // Recent complaints (latest 5)
   const recentComplaints = await Complaint.find()
@@ -281,16 +413,21 @@ const getAdminStats = asyncHandler(async (req, res) => {
       total,
       pending,
       verified,
+      assigned,
       inProgress,
       resolved,
       rejected,
-      activeUsers
+      activeUsers,
+      departments: departmentsCount
     },
     recentComplaints,
     recentActivity: formattedActivity,
     charts: {
       categoryDistribution: categoryStats,
-      complaintTrends
+      monthlyTrends: complaintTrends,
+      dailyTrends,
+      topLocations,
+      departmentPerformance
     }
   });
 });
@@ -350,7 +487,7 @@ const getAllComplaints = asyncHandler(async (req, res) => {
 // @access  Private (Admin)
 const getComplaintDetails = asyncHandler(async (req, res) => {
   const complaint = await Complaint.findById(req.params.id)
-    .populate('user', 'fullName email mobile profilePicture address');
+    .populate('user', 'fullName email mobile profilePicture address district localBody localBodyType ward houseName street landmark pinCode');
 
   if (!complaint) {
     return res.status(404).json({ message: 'Complaint not found' });
@@ -622,11 +759,466 @@ const exportComplaintsAdmin = asyncHandler(async (req, res) => {
   res.status(200).send(csvContent);
 });
 
+// @desc    Get all users with filter, pagination & stats
+// @route   GET /api/admin/users
+// @access  Private/Admin
+const getAllUsers = asyncHandler(async (req, res) => {
+  const { search, status, verification, date, district, page = 1, limit } = req.query;
+  const pageNum = parseInt(page, 10);
+  const limitNum = limit ? parseInt(limit, 10) : 1000;
+  const skip = (pageNum - 1) * limitNum;
+
+  // Base query: all registered users (citizens & admins), not deleted
+  let query = { isDeleted: { $ne: true } };
+
+  // Search by Name, Email, or Phone
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    query.$or = [
+      { fullName: searchRegex },
+      { email: searchRegex },
+      { mobile: searchRegex }
+    ];
+  }
+
+  // Filter by Status (All, Active, Blocked)
+  if (status && status !== 'All') {
+    query.status = status;
+  }
+
+  // Filter by Verification (All, Verified, Unverified)
+  if (verification && verification !== 'All') {
+    query.isVerified = verification === 'Verified';
+  }
+
+  // Filter by District
+  if (district && district !== 'All') {
+    query.district = district;
+  }
+
+  // Filter by Registration Date
+  if (date) {
+    const startOfDay = new Date(date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+  }
+
+  // Execute query with pagination and safety deselect on passwords/tokens
+  const users = await User.find(query)
+    .select('-password -resetPasswordToken -resetPasswordExpire -passwordResetToken -passwordResetExpires -passwordResetOtp -passwordResetOtpExpires')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limitNum);
+
+  const total = await User.countDocuments(query);
+
+  // Compute complaint stats for each user in this page
+  const usersWithStats = await Promise.all(
+    users.map(async (u) => {
+      const [totalComplaints, resolved, pending] = await Promise.all([
+        Complaint.countDocuments({ user: u._id }),
+        Complaint.countDocuments({ user: u._id, status: 'Resolved' }),
+        Complaint.countDocuments({ user: u._id, status: { $in: ['Pending', 'Verified', 'In Progress'] } })
+      ]);
+      return {
+        _id: u._id,
+        fullName: u.fullName,
+        email: u.email,
+        mobile: u.mobile,
+        district: u.district || '',
+        panchayat: u.panchayat || '',
+        localBody: u.localBody || '',
+        localBodyType: u.localBodyType || '',
+        ward: u.ward || '',
+        address: u.address || '',
+        houseName: u.houseName || '',
+        street: u.street || '',
+        landmark: u.landmark || '',
+        pinCode: u.pinCode || '',
+        status: u.status || 'Active',
+        isVerified: u.isVerified,
+        createdAt: u.createdAt,
+        lastLogin: u.lastLogin || null,
+        totalComplaints,
+        resolvedComplaints: resolved,
+        pendingComplaints: pending
+      };
+    })
+  );
+
+  // Calculate summary metrics for the header statistics cards
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [totalUsersCount, activeUsersCount, blockedUsersCount, newUsersCount] = await Promise.all([
+    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true } }),
+    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true }, status: { $ne: 'Blocked' } }),
+    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true }, status: 'Blocked' }),
+    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true }, createdAt: { $gte: startOfMonth } })
+  ]);
+
+  res.status(200).json({
+    success: true,
+    users: usersWithStats,
+    total,
+    stats: {
+      totalUsers: totalUsersCount,
+      activeUsers: activeUsersCount,
+      blockedUsers: blockedUsersCount,
+      newUsersThisMonth: newUsersCount
+    }
+  });
+});
+
+// @desc    Get detailed user profile & history
+// @route   GET /api/admin/users/:id
+// @access  Private/Admin
+const getUserDetails = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, isDeleted: { $ne: true } })
+    .select('-password -resetPasswordToken -resetPasswordExpire -passwordResetToken -passwordResetExpires -passwordResetOtp -passwordResetOtpExpires');
+  if (!user) {
+    return res.status(404).json({ message: 'User not found or has been deleted.' });
+  }
+
+  // Compute stats for Row 2 exactly as required
+  const [total, resolved, pending, rejected, verified, inProgress] = await Promise.all([
+    Complaint.countDocuments({ user: user._id }),
+    Complaint.countDocuments({ user: user._id, status: 'Resolved' }),
+    Complaint.countDocuments({ user: user._id, status: 'Pending' }),
+    Complaint.countDocuments({ user: user._id, status: 'Rejected' }),
+    Complaint.countDocuments({ user: user._id, status: 'Verified' }),
+    Complaint.countDocuments({ user: user._id, status: 'In Progress' })
+  ]);
+
+  // Fetch all complaints
+  const complaints = await Complaint.find({ user: user._id }).sort({ createdAt: -1 });
+
+  // Compile Dynamic Activity Timeline
+  const timeline = [];
+
+  // Event A: Account Registration
+  timeline.push({
+    event: 'Registered Account',
+    description: `Created a new citizen profile on GramConnect. Role: ${user.role || 'Citizen'}`,
+    createdAt: user.createdAt
+  });
+
+  // Event B: Complaint Submissions & Actions
+  for (const c of complaints) {
+    timeline.push({
+      event: 'Submitted Complaint',
+      description: `Submitted complaint: ${c.complaintId} under category ${c.category}.`,
+      createdAt: c.createdAt
+    });
+
+    if (c.status === 'Resolved') {
+      timeline.push({
+        event: 'Complaint Resolved',
+        description: `Complaint ${c.complaintId} has been resolved successfully.`,
+        createdAt: c.updatedAt
+      });
+    } else if (c.status === 'Verified') {
+      timeline.push({
+        event: 'Complaint Verified',
+        description: `Complaint ${c.complaintId} was verified by the Panchayat Admin.`,
+        createdAt: c.updatedAt
+      });
+    }
+  }
+
+  // Event C: Related User Notifications
+  const userNotifs = await Notification.find({ recipientUser: user._id }).sort({ createdAt: -1 }).limit(10);
+  for (const n of userNotifs) {
+    // Avoid duplicate resolved/verified descriptors if they already exist
+    const isDuplicate = timeline.some(t => t.description === n.message);
+    if (!isDuplicate) {
+      timeline.push({
+        event: n.title,
+        description: n.message,
+        createdAt: n.createdAt
+      });
+    }
+  }
+
+  // Sort timeline by date descending
+  timeline.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.status(200).json({
+    success: true,
+    user: {
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      mobile: user.mobile,
+      district: user.district || '',
+      panchayat: user.panchayat || '',
+      localBody: user.localBody || '',
+      localBodyType: user.localBodyType || '',
+      ward: user.ward || '',
+      address: user.address || '',
+      houseName: user.houseName || '',
+      street: user.street || '',
+      landmark: user.landmark || '',
+      pinCode: user.pinCode || '',
+      isVerified: user.isVerified,
+      status: user.status || 'Active',
+      blockedReason: user.blockedReason || '',
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      lastLogin: user.lastLogin || null,
+      role: user.role || 'Citizen',
+      stats: {
+        total,
+        resolved,
+        pending,
+        rejected,
+        verified,
+        inProgress
+      },
+      complaints,
+      timeline
+    }
+  });
+});
+
+// @desc    Update user details
+// @route   PATCH /api/admin/users/:id
+// @access  Private/Admin
+const updateUser = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  const { fullName, email, mobile, address, district, panchayat, ward, isVerified } = req.body;
+
+  if (fullName) user.fullName = fullName;
+  if (email) user.email = email;
+  if (mobile) user.mobile = mobile;
+  if (address !== undefined) user.address = address;
+  if (district !== undefined) user.district = district;
+  if (panchayat !== undefined) user.panchayat = panchayat;
+  if (ward !== undefined) user.ward = ward;
+  if (isVerified !== undefined) user.isVerified = isVerified;
+
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'User profile updated successfully',
+    user
+  });
+});
+
+// @desc    Block user with optional reason
+// @route   PATCH /api/admin/users/:id/block
+// @access  Private/Admin
+const blockUser = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  user.status = 'Blocked';
+  user.blockedReason = req.body.reason || 'No reason provided';
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'User account has been blocked successfully',
+    user
+  });
+});
+
+// @desc    Unblock user
+// @route   PATCH /api/admin/users/:id/unblock
+// @access  Private/Admin
+const unblockUser = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  user.status = 'Active';
+  user.blockedReason = '';
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'User account unblocked successfully',
+    user
+  });
+});
+
+// @desc    Soft delete user
+// @route   DELETE /api/admin/users/:id
+// @access  Private/Admin
+const deleteUser = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  user.isDeleted = true;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'User account has been soft-deleted successfully'
+  });
+});
+
+// @desc    Reset user password
+// @route   PATCH /api/admin/users/:id/reset-password
+// @access  Private/Admin
+const resetUserPassword = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  const { password } = req.body;
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+  }
+
+  user.password = password;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'User password reset successfully'
+  });
+});
+
+// @desc    Export filtered users as CSV/Excel
+// @route   GET /api/admin/users/export
+// @access  Private/Admin
+const exportUsers = asyncHandler(async (req, res) => {
+  const { search, status, verification, date, district, format } = req.query;
+
+  let query = { role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true } };
+
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    query.$or = [
+      { fullName: searchRegex },
+      { email: searchRegex },
+      { mobile: searchRegex }
+    ];
+  }
+  if (status && status !== 'All') {
+    query.status = status;
+  }
+  if (verification && verification !== 'All') {
+    query.isVerified = verification === 'Verified';
+  }
+  if (district && district !== 'All') {
+    query.district = district;
+  }
+  if (date) {
+    const startOfDay = new Date(date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+  }
+
+  const users = await User.find(query).sort({ createdAt: -1 });
+
+  const usersWithStats = await Promise.all(users.map(async (u) => {
+    const [total, resolved, pending] = await Promise.all([
+      Complaint.countDocuments({ user: u._id }),
+      Complaint.countDocuments({ user: u._id, status: 'Resolved' }),
+      Complaint.countDocuments({ user: u._id, status: { $in: ['Pending', 'Verified', 'In Progress'] } })
+    ]);
+    return {
+      fullName: u.fullName,
+      email: u.email,
+      mobile: u.mobile || '',
+      district: u.district || 'Ernakulam',
+      panchayat: u.panchayat || '',
+      ward: u.ward || '',
+      registeredDate: u.createdAt.toISOString().split('T')[0],
+      lastLogin: u.lastLogin ? u.lastLogin.toISOString().split('T')[0] : 'Never',
+      isVerified: u.isVerified ? 'Verified' : 'Unverified',
+      totalComplaints: total,
+      resolvedComplaints: resolved,
+      pendingComplaints: pending,
+      status: u.status || 'Active'
+    };
+  }));
+
+  const escapeCsv = (str) => {
+    if (str === null || str === undefined) return '';
+    const s = String(str);
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  let rows = [];
+  rows.push([
+    'Full Name',
+    'Email',
+    'Phone',
+    'District',
+    'Panchayat',
+    'Ward',
+    'Registered Date',
+    'Last Login',
+    'Email Verified',
+    'Total Complaints',
+    'Resolved Complaints',
+    'Pending Complaints',
+    'Status'
+  ].join(','));
+
+  for (const u of usersWithStats) {
+    const row = [
+      escapeCsv(u.fullName),
+      escapeCsv(u.email),
+      escapeCsv(u.mobile),
+      escapeCsv(u.district),
+      escapeCsv(u.panchayat),
+      escapeCsv(u.ward),
+      escapeCsv(u.registeredDate),
+      escapeCsv(u.lastLogin),
+      escapeCsv(u.isVerified),
+      u.totalComplaints,
+      u.resolvedComplaints,
+      u.pendingComplaints,
+      escapeCsv(u.status)
+    ];
+    rows.push(row.join(','));
+  }
+
+  const csvContent = rows.join('\r\n');
+
+  const filename = format === 'excel' ? 'users_export.xls' : 'users_export.csv';
+  const contentType = format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv';
+
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  res.status(200).send(csvContent);
+});
+
 module.exports = {
   getAdminStats,
   getAllComplaints,
   getComplaintDetails,
   updateComplaintAdmin,
   deleteComplaintAdmin,
-  exportComplaintsAdmin
+  exportComplaintsAdmin,
+  getAllUsers,
+  getUserDetails,
+  updateUser,
+  blockUser,
+  unblockUser,
+  deleteUser,
+  resetUserPassword,
+  exportUsers
 };

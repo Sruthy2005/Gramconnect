@@ -6,11 +6,37 @@ const {
   getComplaintDetails,
   updateComplaintAdmin,
   deleteComplaintAdmin,
-  exportComplaintsAdmin
+  exportComplaintsAdmin,
+  getAllUsers,
+  getUserDetails,
+  updateUser,
+  blockUser,
+  unblockUser,
+  deleteUser,
+  resetUserPassword,
+  exportUsers
 } = require('../controllers/adminController');
+const {
+  getAllCommunityPosts,
+  approveCommunityPost,
+  rejectCommunityPost,
+  deleteCommunityPost,
+  exportCommunityPosts
+} = require('../controllers/communityController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
-const adminGuard = [protect, authorize('Admin', 'admin')];
+const {
+  getPanchayats,
+  getPanchayatById,
+  createPanchayat,
+  updatePanchayat,
+  updatePanchayatStatus,
+  deletePanchayat,
+  getPotentialAdmins
+} = require('../controllers/panchayatController');
+
+const adminGuard = [protect, authorize('Admin', 'admin', 'SUPER_ADMIN', 'super_admin', 'PANCHAYAT_ADMIN', 'panchayat_admin')];
+const superAdminGuard = [protect, authorize('SUPER_ADMIN', 'super_admin', 'Admin', 'admin')];
 
 router.get('/stats', adminGuard, getAdminStats);
 
@@ -23,5 +49,41 @@ router.route('/complaints/:id')
   .get(adminGuard, getComplaintDetails)
   .put(adminGuard, updateComplaintAdmin)
   .delete(adminGuard, deleteComplaintAdmin);
+
+// Users Routing
+router.get('/users/export', adminGuard, exportUsers);
+
+router.route('/users')
+  .get(adminGuard, getAllUsers);
+
+router.route('/users/:id')
+  .get(adminGuard, getUserDetails)
+  .patch(adminGuard, updateUser)
+  .delete(adminGuard, deleteUser);
+
+router.patch('/users/:id/block', adminGuard, blockUser);
+router.patch('/users/:id/unblock', adminGuard, unblockUser);
+router.patch('/users/:id/reset-password', adminGuard, resetUserPassword);
+
+// Community Posts Routing
+router.get('/community/posts', adminGuard, getAllCommunityPosts);
+router.get('/community/posts/export', adminGuard, exportCommunityPosts);
+router.patch('/community/posts/:id/approve', adminGuard, approveCommunityPost);
+router.patch('/community/posts/:id/reject', adminGuard, rejectCommunityPost);
+router.delete('/community/posts/:id', adminGuard, deleteCommunityPost);
+
+// Panchayat Management Routing
+router.route('/panchayats')
+  .get(superAdminGuard, getPanchayats)
+  .post(superAdminGuard, createPanchayat);
+
+router.get('/panchayats/admins/potential', superAdminGuard, getPotentialAdmins);
+
+router.route('/panchayats/:id')
+  .get(superAdminGuard, getPanchayatById)
+  .put(superAdminGuard, updatePanchayat)
+  .delete(superAdminGuard, deletePanchayat);
+
+router.patch('/panchayats/:id/status', superAdminGuard, updatePanchayatStatus);
 
 module.exports = router;

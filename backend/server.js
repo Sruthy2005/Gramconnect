@@ -14,7 +14,7 @@ const connectDB = require('./config/db');
 const app = require('./app');
 
 // Import SMTP transporter to trigger verification on server boot (Requirement 11/12)
-const transporter = require('./utils/transporter');
+require('./utils/transporter');
 
 const PORT = process.env.PORT || 5000;
 

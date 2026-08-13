@@ -36,8 +36,13 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['Citizen', 'Admin', 'citizen', 'admin'],
+      enum: ['Citizen', 'Admin', 'citizen', 'admin', 'SUPER_ADMIN', 'super_admin', 'PANCHAYAT_ADMIN', 'panchayat_admin'],
       default: 'citizen'
+    },
+    panchayatId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Panchayat',
+      default: null
     },
     isVerified: {
       type: Boolean,
@@ -50,6 +55,42 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    houseName: {
+      type: String,
+      default: ''
+    },
+    street: {
+      type: String,
+      default: ''
+    },
+    landmark: {
+      type: String,
+      default: ''
+    },
+    pinCode: {
+      type: String,
+      default: ''
+    },
+    district: {
+      type: String,
+      default: ''
+    },
+    panchayat: {
+      type: String,
+      default: ''
+    },
+    ward: {
+      type: String,
+      default: ''
+    },
+    localBody: {
+      type: String,
+      default: ''
+    },
+    localBodyType: {
+      type: String,
+      default: ''
+    },
     googleId: {
       type: String
     },
@@ -58,12 +99,28 @@ const userSchema = new mongoose.Schema(
       enum: ['local', 'google'],
       default: 'local'
     },
+    status: {
+      type: String,
+      enum: ['Active', 'Blocked', 'active', 'blocked'],
+      default: 'Active'
+    },
+    blockedReason: {
+      type: String,
+      default: ''
+    },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
     passwordResetToken: String,
     passwordResetExpires: Date,
     passwordResetOtp: String,
-    passwordResetOtpExpires: Date
+    passwordResetOtpExpires: Date,
+    isDeleted: {
+      type: Boolean,
+      default: false
+    },
+    lastLogin: {
+      type: Date
+    }
   },
   {
     timestamps: true

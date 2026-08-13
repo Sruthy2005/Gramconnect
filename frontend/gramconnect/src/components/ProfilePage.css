@@ -284,6 +284,12 @@
   border-color: #e2e8f0;
   color: var(--text-muted);
   cursor: not-allowed;
+  opacity: 1;
+  -webkit-text-fill-color: var(--text-muted);
+}
+
+select.profile-input {
+  cursor: pointer;
 }
 
 .form-controls-row {

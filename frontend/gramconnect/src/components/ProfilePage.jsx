@@ -5,6 +5,79 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import './ProfilePage.css';
 
+const LOCATION_DATA = {
+  "Thiruvananthapuram": {
+    "Corporations": ["Thiruvananthapuram Corporation"],
+    "Municipalities": ["Neyyattinkara", "Nedumangad", "Attingal", "Varkala"],
+    "Panchayats": ["Balaramapuram", "Kanjiramkulam", "Karumkulam", "Kottukal", "Poovar"]
+  },
+  "Kollam": {
+    "Corporations": ["Kollam Corporation"],
+    "Municipalities": ["Punalur", "Paravur", "Karunagappally", "Kottarakkara"],
+    "Panchayats": ["Chathannoor", "Kundara", "Anchal", "Pathanapuram", "Oyur"]
+  },
+  "Pathanamthitta": {
+    "Corporations": [],
+    "Municipalities": ["Adoor", "Pathanamthitta", "Thiruvalla"],
+    "Panchayats": ["Mallappally", "Ranni", "Konni", "Pandalam Thekkekara", "Kozhenchery"]
+  },
+  "Alappuzha": {
+    "Corporations": [],
+    "Municipalities": ["Alappuzha", "Cherthala", "Kayamkulam", "Haripad", "Mavelikkara", "Chengannur"],
+    "Panchayats": ["Ambalappuzha", "Mannar", "Kuttanad", "Mararikulam", "Punnapra"]
+  },
+  "Kottayam": {
+    "Corporations": [],
+    "Municipalities": ["Kottayam", "Changanassery", "Pala", "Vaikom", "Ettumanour"],
+    "Panchayats": ["Kanjirappally", "Pampady", "Athirampuzha", "Kumarakom", "Puthuppally"]
+  },
+  "Idukki": {
+    "Corporations": [],
+    "Municipalities": ["Thodupuzha", "Kattappana"],
+    "Panchayats": ["Munnar", "Adimali", "Nedumkandam", "Kumily", "Peerumedu"]
+  },
+  "Ernakulam": {
+    "Corporations": ["Kochi Corporation"],
+    "Municipalities": ["Aluva", "Angamaly", "North Paravur", "Perumbavoor", "Kothamangalam", "Muvattupuzha", "Tripunithura", "Kalamassery", "Thrikkakara", "Eloor", "Maradu", "Piravom", "Koothattukulam"],
+    "Panchayats": ["Mulanthuruthy", "Vazhakulam", "Kumbalangi", "Cheranallur", "Kadamakkudy"]
+  },
+  "Thrissur": {
+    "Corporations": ["Thrissur Corporation"],
+    "Municipalities": ["Chalakudy", "Chavakkad", "Guruvayur", "Irinjalakuda", "Kodungallur", "Kunnamkulam", "Wadakkanchery"],
+    "Panchayats": ["Cherpu", "Pudukad", "Mala", "Alagappa Nagar", "Ollur"]
+  },
+  "Palakkad": {
+    "Corporations": [],
+    "Municipalities": ["Palakkad", "Ottapalam", "Shoranur", "Chittur-Thathamangalam", "Cherpulassery", "Mannarkkad"],
+    "Panchayats": ["Alathur", "Kuzhalmannam", "Pattambi", "Vaniyamkulam", "Elappully"]
+  },
+  "Malappuram": {
+    "Corporations": [],
+    "Municipalities": ["Malappuram", "Manjeri", "Kottakkal", "Perinthalmanna", "Ponnani", "Tirur", "Valanchery", "Nilambur", "Kondotty", "Tanur", "Parappanangadi", "Tirurangadi"],
+    "Panchayats": ["Edappal", "Wandoor", "Areacode", "Kottakkal Rural", "Mankada"]
+  },
+  "Kozhikode": {
+    "Corporations": ["Kozhikode Corporation"],
+    "Municipalities": ["Vadakara", "Koyilandy", "Koduvally", "Mukkam", "Ramanattukara", "Feroke", "Payyoli"],
+    "Panchayats": ["Balussery", "Perambra", "Kunnamangalam", "Thamarassery", "Atholi"]
+  },
+  "Wayanad": {
+    "Corporations": [],
+    "Municipalities": ["Kalpetta", "Mananthavady", "Sulthan Bathery"],
+    "Panchayats": ["Meppadi", "Vythiri", "Ambalavayal", "Panamaram", "Pulpally"]
+  },
+  "Kannur": {
+    "Corporations": ["Kannur Corporation"],
+    "Municipalities": ["Thalassery", "Payyannur", "Taliparamba", "Mattannur", "Koothuparamba", "Iritty", "Anthoor", "Panoor"],
+    "Panchayats": ["Peringome", "Alakode", "Kelakam", "Chakkarakkal", "Panoor Rural"]
+  },
+  "Kasaragod": {
+    "Corporations": [],
+    "Municipalities": ["Kasaragod", "Kanhangad", "Nileshwaram"],
+    "Panchayats": ["Manjeshwar", "Kumbla", "Uppala", "Nileshwar Rural", "Cheruvathur"]
+  }
+};
+
 export default function ProfilePage({ onLogout }) {
   const { t } = useTranslation();
   const { user, setUser } = useAuth();
@@ -15,6 +88,14 @@ export default function ProfilePage({ onLogout }) {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [houseName, setHouseName] = useState('');
+  const [street, setStreet] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [pinCode, setPinCode] = useState('');
+  const [district, setDistrict] = useState('');
+  const [localBody, setLocalBody] = useState('');
+  const [localBodyType, setLocalBodyType] = useState('');
+  const [ward, setWard] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
 
   // Password fields
@@ -32,6 +113,14 @@ export default function ProfilePage({ onLogout }) {
       setFullName(user.fullName || '');
       setPhone(user.mobile || '');
       setAddress(user.address || '');
+      setHouseName(user.houseName || '');
+      setStreet(user.street || '');
+      setLandmark(user.landmark || '');
+      setPinCode(user.pinCode || '');
+      setDistrict(user.district || '');
+      setLocalBody(user.localBody || '');
+      setLocalBodyType(user.localBodyType || '');
+      setWard(user.ward || '');
     }
   }, [user]);
 
@@ -61,12 +150,50 @@ export default function ProfilePage({ onLogout }) {
       return;
     }
 
+    if (!district) {
+      showToast('District is required.', 'error');
+      return;
+    }
+    if (!localBody) {
+      showToast('Local Body is required.', 'error');
+      return;
+    }
+    if (!ward) {
+      showToast('Ward is required.', 'error');
+      return;
+    }
+    if (!houseName.trim()) {
+      showToast('House Name / Building Name is required.', 'error');
+      return;
+    }
+    if (!street.trim()) {
+      showToast('Street / Locality is required.', 'error');
+      return;
+    }
+    if (!pinCode.trim()) {
+      showToast('PIN Code is required.', 'error');
+      return;
+    }
+    if (!/^\d{6}$/.test(pinCode.trim())) {
+      showToast('PIN Code must be a valid 6-digit Indian PIN format.', 'error');
+      return;
+    }
+
     try {
       setProfileSaving(true);
+      const computedAddress = `${houseName.trim()}, ${street.trim()}${landmark.trim() ? `, ${landmark.trim()}` : ''}, PIN: ${pinCode.trim()}`;
       const response = await api.put('/profile', {
         fullName: fullName.trim(),
         mobile: phone.trim(),
-        address: address.trim()
+        address: computedAddress,
+        houseName: houseName.trim(),
+        street: street.trim(),
+        landmark: landmark.trim(),
+        pinCode: pinCode.trim(),
+        district,
+        localBody,
+        localBodyType,
+        ward
       });
 
       if (response.data && response.data.user) {
@@ -293,19 +420,186 @@ export default function ProfilePage({ onLogout }) {
               </div>
             </div>
 
-            {/* Address */}
+            {/* District */}
             <div className="input-field-group">
-              <label className="input-label" htmlFor="address">Address</label>
-              <div className="input-wrapper">
-                <MapPin size={16} className="input-icon-left" />
+              <label className="input-label" htmlFor="district">District *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <select
+                  id="district"
+                  className="profile-input"
+                  value={district}
+                  onChange={(e) => {
+                    setDistrict(e.target.value);
+                    setLocalBody('');
+                    setLocalBodyType('');
+                    setWard('');
+                  }}
+                  disabled={!isEditing || profileSaving}
+                  required
+                  style={{ width: '100%', paddingLeft: '44px', textIndent: '44px', color: district ? 'var(--text-dark)' : '#94a3b8' }}
+                >
+                  <option value="" style={{ color: '#94a3b8' }}>Select District</option>
+                  {Object.keys(LOCATION_DATA).map((d) => (
+                    <option key={d} value={d} style={{ color: 'var(--text-dark)' }}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Local Body */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="localBody">Panchayat / Municipality / Corporation *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <select
+                  id="localBody"
+                  className="profile-input"
+                  value={localBody}
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    setLocalBody(selected);
+                    if (district && LOCATION_DATA[district]) {
+                      const distData = LOCATION_DATA[district];
+                      if (distData.Corporations.includes(selected)) {
+                        setLocalBodyType('Corporation');
+                      } else if (distData.Municipalities.includes(selected)) {
+                        setLocalBodyType('Municipality');
+                      } else if (distData.Panchayats.includes(selected)) {
+                        setLocalBodyType('Panchayat');
+                      } else {
+                        setLocalBodyType('');
+                      }
+                    }
+                    setWard('');
+                  }}
+                  disabled={!isEditing || profileSaving || !district}
+                  required
+                  style={{ width: '100%', paddingLeft: '44px', textIndent: '44px', color: localBody ? 'var(--text-dark)' : '#94a3b8' }}
+                >
+                  <option value="" style={{ color: '#94a3b8' }}>Select Local Body</option>
+                  {district && LOCATION_DATA[district] && (
+                    <>
+                      {LOCATION_DATA[district].Corporations.length > 0 && (
+                        <optgroup label="Corporations" style={{ color: 'var(--text-dark)' }}>
+                          {LOCATION_DATA[district].Corporations.map((c) => (
+                            <option key={c} value={c} style={{ color: 'var(--text-dark)' }}>{c}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {LOCATION_DATA[district].Municipalities.length > 0 && (
+                        <optgroup label="Municipalities" style={{ color: 'var(--text-dark)' }}>
+                          {LOCATION_DATA[district].Municipalities.map((m) => (
+                            <option key={m} value={m} style={{ color: 'var(--text-dark)' }}>{m}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {LOCATION_DATA[district].Panchayats.length > 0 && (
+                        <optgroup label="Panchayats" style={{ color: 'var(--text-dark)' }}>
+                          {LOCATION_DATA[district].Panchayats.map((p) => (
+                            <option key={p} value={p} style={{ color: 'var(--text-dark)' }}>{p}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </>
+                  )}
+                </select>
+              </div>
+            </div>
+
+            {/* Ward */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="ward">Ward *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <select
+                  id="ward"
+                  className="profile-input"
+                  value={ward}
+                  onChange={(e) => setWard(e.target.value)}
+                  disabled={!isEditing || profileSaving || !localBody}
+                  required
+                  style={{ width: '100%', paddingLeft: '44px', textIndent: '44px', color: ward ? 'var(--text-dark)' : '#94a3b8' }}
+                >
+                  <option value="" style={{ color: '#94a3b8' }}>Select Ward</option>
+                  {Array.from({ length: 50 }, (_, i) => `Ward ${i + 1}`).map((w) => (
+                    <option key={w} value={w} style={{ color: 'var(--text-dark)' }}>{w}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* House Name / Building Name */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="houseName">House Name / Building Name *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
                 <input
                   type="text"
-                  id="address"
+                  id="houseName"
                   className="profile-input"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  value={houseName}
+                  onChange={(e) => setHouseName(e.target.value)}
                   disabled={!isEditing || profileSaving}
-                  placeholder="Not provided"
+                  placeholder="House Name / Building Name"
+                  required
+                  style={{ paddingLeft: '44px' }}
+                />
+              </div>
+            </div>
+
+            {/* Street / Locality */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="street">Street / Locality *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <input
+                  type="text"
+                  id="street"
+                  className="profile-input"
+                  value={street}
+                  onChange={(e) => setStreet(e.target.value)}
+                  disabled={!isEditing || profileSaving}
+                  placeholder="Street / Locality"
+                  required
+                  style={{ paddingLeft: '44px' }}
+                />
+              </div>
+            </div>
+
+            {/* Landmark */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="landmark">Landmark (Optional)</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <input
+                  type="text"
+                  id="landmark"
+                  className="profile-input"
+                  value={landmark}
+                  onChange={(e) => setLandmark(e.target.value)}
+                  disabled={!isEditing || profileSaving}
+                  placeholder="Landmark (Optional)"
+                  style={{ paddingLeft: '44px' }}
+                />
+              </div>
+            </div>
+
+            {/* PIN Code */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="pinCode">PIN Code *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <input
+                  type="text"
+                  id="pinCode"
+                  className="profile-input"
+                  value={pinCode}
+                  onChange={(e) => setPinCode(e.target.value)}
+                  disabled={!isEditing || profileSaving}
+                  placeholder="PIN Code"
+                  required
+                  style={{ paddingLeft: '44px' }}
                 />
               </div>
             </div>
@@ -321,6 +615,14 @@ export default function ProfilePage({ onLogout }) {
                     setFullName(user.fullName || '');
                     setPhone(user.mobile || '');
                     setAddress(user.address || '');
+                    setHouseName(user.houseName || '');
+                    setStreet(user.street || '');
+                    setLandmark(user.landmark || '');
+                    setPinCode(user.pinCode || '');
+                    setDistrict(user.district || '');
+                    setLocalBody(user.localBody || '');
+                    setLocalBodyType(user.localBodyType || '');
+                    setWard(user.ward || '');
                   }}
                   disabled={profileSaving}
                 >

@@ -21,6 +21,11 @@ const categoryDepartmentMap = {
 // @route   POST /api/issues
 // @access  Private
 const createComplaint = asyncHandler(async (req, res) => {
+  // Blocked user check
+  if (req.user.status === 'Blocked' || req.user.status === 'blocked') {
+    return res.status(403).json({ message: 'Your account is blocked and you cannot submit complaints.' });
+  }
+
   const {
     title,
     description,

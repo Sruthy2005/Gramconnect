@@ -59,6 +59,8 @@ export default function AdminDashboard() {
     const hash = window.location.hash;
     if (hash.startsWith('#admin/complaints/')) return 'complaint-details';
     if (hash.startsWith('#admin/complaints')) return 'complaints';
+    if (hash === '#admin/users') return 'users';
+    if (hash === '#admin/community') return 'community';
     return 'dashboard';
   });
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
@@ -106,6 +108,30 @@ export default function AdminDashboard() {
     complaintTrends: []
   });
 
+  // Users Management states
+  const [users, setUsers] = useState([]);
+  const [userStats, setUserStats] = useState({ totalUsers: 0, activeUsers: 0, blockedUsers: 0 });
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userPanchayatFilter, setUserPanchayatFilter] = useState('');
+  const [userStatusFilter, setUserStatusFilter] = useState('');
+  const [selectedUserDetails, setSelectedUserDetails] = useState(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+
+  // Community Hub states
+  const [posts, setPosts] = useState([]);
+  const [postStats, setPostStats] = useState({ totalPosts: 0, pendingReview: 0, approvedPosts: 0, rejectedPosts: 0 });
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [postsError, setPostsError] = useState(null);
+  const [postSearchQuery, setPostSearchQuery] = useState('');
+  const [postStatusFilter, setPostStatusFilter] = useState('');
+  const [selectedPostDetails, setSelectedPostDetails] = useState(null);
+  const [loadingPostDetails, setLoadingPostDetails] = useState(false);
+  const [postModalOpen, setPostModalOpen] = useState(false);
+
+
   // Filter States (Complaint Management)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -151,6 +177,12 @@ export default function AdminDashboard() {
     } else if (hash === '#admin/notifications') {
       setViewingComplaintId(null);
       setActiveTab('notifications');
+    } else if (hash === '#admin/users') {
+      setViewingComplaintId(null);
+      setActiveTab('users');
+    } else if (hash === '#admin/community') {
+      setViewingComplaintId(null);
+      setActiveTab('community');
     } else {
       setViewingComplaintId(null);
       setActiveTab('dashboard');
@@ -191,7 +223,7 @@ export default function AdminDashboard() {
       const complaintsRes = await api.get('/admin/complaints');
       if (complaintsRes.data && complaintsRes.data.success) {
         setComplaints(complaintsRes.data.complaints || []);
-        
+
         // Populate first 5 recent
         const formattedRecent = complaintsRes.data.complaints.slice(0, 5).map(c => ({
           id: c.complaintId,
@@ -208,6 +240,140 @@ export default function AdminDashboard() {
       setError(err.message || 'Failed to establish database synchronization with Panchayat Server.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    setUsersError(null);
+    try {
+      const res = await api.get('/admin/users?limit=1000');
+      if (res.data && res.data.success) {
+        setUsers(res.data.users || []);
+        if (res.data.stats) {
+          setUserStats({
+            totalUsers: res.data.stats.totalUsers || 0,
+            activeUsers: res.data.stats.activeUsers || 0,
+            blockedUsers: res.data.stats.blockedUsers || 0
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to load users:', err);
+      setUsersError(err.message || 'Failed to retrieve users list.');
+      showToast('Error fetching users from database.', 'error');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const fetchUserDetails = async (userId) => {
+    setLoadingUserDetails(true);
+    try {
+      const res = await api.get(`/admin/users/${userId}`);
+      if (res.data && res.data.success) {
+        setSelectedUserDetails(res.data.user);
+      }
+    } catch (err) {
+      console.error('Failed to load user details:', err);
+      showToast('Failed to load user details.', 'error');
+    } finally {
+      setLoadingUserDetails(false);
+    }
+  };
+
+  const handleBlockUser = async (userId, reason) => {
+    try {
+      const res = await api.patch(`/admin/users/${userId}/block`, { reason });
+      if (res.data && res.data.success) {
+        showToast('User has been blocked successfully.');
+        fetchUsers();
+        if (selectedUserDetails && selectedUserDetails._id === userId) {
+          fetchUserDetails(userId);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to block user.', 'error');
+    }
+  };
+
+  const handleUnblockUser = async (userId) => {
+    try {
+      const res = await api.patch(`/admin/users/${userId}/unblock`);
+      if (res.data && res.data.success) {
+        showToast('User has been unblocked successfully.');
+        fetchUsers();
+        if (selectedUserDetails && selectedUserDetails._id === userId) {
+          fetchUserDetails(userId);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to unblock user.', 'error');
+    }
+  };
+
+  const fetchPosts = async () => {
+    setLoadingPosts(true);
+    setPostsError(null);
+    try {
+      const res = await api.get('/admin/community/posts');
+      if (res.data && res.data.success) {
+        setPosts(res.data.posts || []);
+        if (res.data.stats) {
+          setPostStats({
+            totalPosts: res.data.stats.totalPosts || 0,
+            pendingReview: res.data.stats.pendingReview || 0,
+            approvedPosts: res.data.stats.approvedPosts || 0,
+            rejectedPosts: res.data.stats.rejectedPosts || 0
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to load community posts:', err);
+      setPostsError(err.message || 'Failed to retrieve posts from community hub.');
+      showToast('Error fetching community posts.', 'error');
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
+  const handleApprovePost = async (postId) => {
+    try {
+      const res = await api.patch(`/admin/community/posts/${postId}/approve`);
+      if (res.data && res.data.success) {
+        showToast('Post approved successfully.');
+        fetchPosts();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to approve post.', 'error');
+    }
+  };
+
+  const handleRejectPost = async (postId) => {
+    try {
+      const res = await api.patch(`/admin/community/posts/${postId}/reject`);
+      if (res.data && res.data.success) {
+        showToast('Post rejected successfully.');
+        fetchPosts();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to reject post.', 'error');
+    }
+  };
+
+  const handleDeletePost = async (postId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this post?')) return;
+    try {
+      const res = await api.delete(`/admin/community/posts/${postId}`);
+      if (res.data && res.data.success) {
+        showToast('Post deleted successfully.');
+        fetchPosts();
+        if (selectedPostDetails && selectedPostDetails._id === postId) {
+          setPostModalOpen(false);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete post.', 'error');
     }
   };
 
@@ -244,7 +410,7 @@ export default function AdminDashboard() {
           return [newNotif, ...prev];
         });
         setUnreadNotificationsCount((prev) => prev + 1);
-        
+
         // Refresh admin metrics and list in real-time
         fetchData();
       } catch (err) {
@@ -265,6 +431,12 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'dashboard' || activeTab === 'complaints') {
       fetchNotifications();
+    }
+    if (activeTab === 'users') {
+      fetchUsers();
+    }
+    if (activeTab === 'community') {
+      fetchPosts();
     }
   }, [activeTab]);
 
@@ -330,7 +502,7 @@ export default function AdminDashboard() {
 
   // Filtered notifications logic
   const filteredNotifs = notifications.filter(n => {
-    const matchesSearch = 
+    const matchesSearch =
       n.title.toLowerCase().includes(notifSearchQuery.toLowerCase()) ||
       n.message.toLowerCase().includes(notifSearchQuery.toLowerCase()) ||
       (n.relatedComplaint && (typeof n.relatedComplaint === 'object' ? n.relatedComplaint.complaintId : n.relatedComplaint).toLowerCase().includes(notifSearchQuery.toLowerCase()));
@@ -339,10 +511,10 @@ export default function AdminDashboard() {
 
     if (notifFilter === 'Unread') return !n.isRead;
     if (notifFilter === 'Read') return n.isRead;
-    
+
     const titleL = n.title.toLowerCase();
     const msgL = n.message.toLowerCase();
-    
+
     if (notifFilter === 'Complaint') {
       return titleL.includes('complaint') || msgL.includes('complaint') || n.relatedComplaint;
     }
@@ -371,14 +543,14 @@ export default function AdminDashboard() {
   // Dedicated Notifications View
   const renderNotificationsPage = (isAdmin = false) => {
     const getNotifIcon = (n) => {
-      const IconComponent = n.type === 'Success' ? CheckCircle 
-                          : n.type === 'Warning' ? AlertTriangle 
-                          : n.type === 'Error' ? AlertCircle 
-                          : Info;
-      const iconColor = n.type === 'Success' ? '#10b981' 
-                      : n.type === 'Warning' ? '#f59e0b' 
-                      : n.type === 'Error' ? '#ef4444' 
-                      : '#3b82f6';
+      const IconComponent = n.type === 'Success' ? CheckCircle
+        : n.type === 'Warning' ? AlertTriangle
+          : n.type === 'Error' ? AlertCircle
+            : Info;
+      const iconColor = n.type === 'Success' ? '#10b981'
+        : n.type === 'Warning' ? '#f59e0b'
+          : n.type === 'Error' ? '#ef4444'
+            : '#3b82f6';
       return <IconComponent size={20} style={{ color: iconColor }} />;
     };
 
@@ -392,18 +564,18 @@ export default function AdminDashboard() {
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-dark)' }}>Notifications</h1>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>View and manage all your notifications.</p>
           </div>
-          
+
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              className="admin-btn secondary" 
-              onClick={handleMarkAllAsRead} 
+            <button
+              className="admin-btn secondary"
+              onClick={handleMarkAllAsRead}
               disabled={unreadNotificationsCount === 0}
               style={{ padding: '8px 14px', fontSize: '0.8rem', fontWeight: 700 }}
             >
               Mark All as Read
             </button>
-            <button 
-              className="admin-btn danger" 
+            <button
+              className="admin-btn danger"
               onClick={handleDeleteAllRead}
               disabled={!notifications.some(n => n.isRead)}
               style={{ background: '#ef4444', color: '#fff', padding: '8px 14px', fontSize: '0.8rem', fontWeight: 700, border: 'none', borderRadius: '6px', cursor: 'pointer' }}
@@ -420,9 +592,9 @@ export default function AdminDashboard() {
               <button
                 key={opt}
                 onClick={() => { setNotifFilter(opt); setNotifCurrentPage(1); }}
-                style={{ 
-                  padding: '6px 12px', 
-                  borderRadius: '20px', 
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '20px',
                   border: '1px solid',
                   borderColor: notifFilter === opt ? '#3b82f6' : '#e2e8f0',
                   background: notifFilter === opt ? '#eff6ff' : '#ffffff',
@@ -467,7 +639,7 @@ export default function AdminDashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {currentNotifsPage.map((n) => {
               const compId = n.relatedComplaint ? (typeof n.relatedComplaint === 'object' ? n.relatedComplaint.complaintId : 'Complaint') : null;
-              
+
               return (
                 <div
                   key={n._id}
@@ -477,7 +649,7 @@ export default function AdminDashboard() {
                     const cleanMsg = n.message.toLowerCase();
                     if (n.relatedComplaint) {
                       const dbId = typeof n.relatedComplaint === 'object' ? n.relatedComplaint._id : n.relatedComplaint;
-                      window.location.hash = isAdmin 
+                      window.location.hash = isAdmin
                         ? `#admin/complaints/${dbId}`
                         : `#dashboard/my-complaints?id=${dbId}`;
                     } else if (cleanTitle.includes('announcement') || cleanMsg.includes('announcement')) {
@@ -519,7 +691,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
                     <p style={{ margin: 0, fontSize: '0.82rem', color: '#4b5563', lineHeight: 1.4 }}>{n.message}</p>
-                    
+
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                         {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -595,7 +767,7 @@ export default function AdminDashboard() {
         const comp = res.data.complaint;
         setDetailsComplaint(comp);
         setDetailsActivityLogs(res.data.activityLogs || []);
-        setDetailsAdminNote(comp.adminNote || comp.landmark || ''); 
+        setDetailsAdminNote(comp.adminNote || comp.landmark || '');
         setDetailsDeptAssign(comp.assignedDepartment || '');
         setDetailsOfficerAssign(comp.assignedOfficer || '');
         setDetailsCompletionDate(comp.dueDate || '');
@@ -646,7 +818,7 @@ export default function AdminDashboard() {
 
       const dateStr = new Date().toISOString().split('T')[0];
       const filename = `complaints-${dateStr}.csv`;
-      
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -937,8 +1109,8 @@ export default function AdminDashboard() {
         {/* Profile menu */}
         <div className="dash-nav-actions">
           <div style={{ position: 'relative' }} ref={notificationsDropdownRef}>
-            <button 
-              className="btn-nav-action" 
+            <button
+              className="btn-nav-action"
               onClick={handleToggleNotifications}
               style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
@@ -956,8 +1128,8 @@ export default function AdminDashboard() {
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #edf2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-dark)' }}>Admin Notifications</span>
                   {unreadNotificationsCount > 0 && (
-                    <button 
-                      onClick={handleMarkAllAsRead} 
+                    <button
+                      onClick={handleMarkAllAsRead}
                       style={{ fontSize: '0.75rem', color: '#3b82f6', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700 }}
                     >
                       Mark all as read
@@ -979,18 +1151,18 @@ export default function AdminDashboard() {
                     </div>
                   ) : (
                     notifications.slice(0, 8).map((n) => {
-                      const IconComponent = n.type === 'Success' ? CheckCircle 
-                                          : n.type === 'Warning' ? AlertTriangle 
-                                          : n.type === 'Error' ? AlertCircle 
-                                          : Info;
-                      const iconColor = n.type === 'Success' ? '#10b981' 
-                                      : n.type === 'Warning' ? '#f59e0b' 
-                                      : n.type === 'Error' ? '#ef4444' 
-                                      : '#3b82f6';
-                      
+                      const IconComponent = n.type === 'Success' ? CheckCircle
+                        : n.type === 'Warning' ? AlertTriangle
+                          : n.type === 'Error' ? AlertCircle
+                            : Info;
+                      const iconColor = n.type === 'Success' ? '#10b981'
+                        : n.type === 'Warning' ? '#f59e0b'
+                          : n.type === 'Error' ? '#ef4444'
+                            : '#3b82f6';
+
                       return (
-                        <div 
-                          key={n._id} 
+                        <div
+                          key={n._id}
                           onClick={() => {
                             handleMarkAsRead(n._id);
                             setNotificationsDropdownOpen(false);
@@ -999,12 +1171,12 @@ export default function AdminDashboard() {
                               window.location.hash = `#admin/complaints/${compId}`;
                             }
                           }}
-                          style={{ 
-                            padding: '12px 16px', 
-                            borderBottom: '1px solid #edf2f7', 
-                            display: 'flex', 
-                            gap: '12px', 
-                            background: n.isRead ? 'transparent' : '#f0fdf4', 
+                          style={{
+                            padding: '12px 16px',
+                            borderBottom: '1px solid #edf2f7',
+                            display: 'flex',
+                            gap: '12px',
+                            background: n.isRead ? 'transparent' : '#f0fdf4',
                             transition: 'all 0.15s ease',
                             cursor: 'pointer',
                             alignItems: 'flex-start',
@@ -1035,10 +1207,10 @@ export default function AdminDashboard() {
                                 e.stopPropagation();
                                 handleDeleteNotification(n._id);
                               }}
-                              style={{ 
-                                border: 'none', 
-                                background: 'none', 
-                                color: '#9ca3af', 
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                color: '#9ca3af',
                                 cursor: 'pointer',
                                 padding: '2px',
                                 display: 'flex',
@@ -1139,11 +1311,17 @@ export default function AdminDashboard() {
             <AlertTriangle size={18} />
             <span>Complaints</span>
           </button>
-          <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
+          <button
+            className={`sidebar-item ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/users'; setActiveTab('users'); }}
+          >
             <Users size={18} />
             <span>Users</span>
           </button>
-          <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
+          <button
+            className={`sidebar-item ${activeTab === 'community' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/community'; setActiveTab('community'); }}
+          >
             <Activity size={18} />
             <span>Community Hub</span>
           </button>
@@ -1180,11 +1358,479 @@ export default function AdminDashboard() {
 
       {/* Main Container */}
       <main className="dash-main" style={{ animation: 'fadeIn 0.4s ease-out' }}>
-        
+
         {/* ==========================================
             VIEW NOTIFICATIONS: DEDICATED NOTIFICATIONS PAGE
             ========================================== */}
         {activeTab === 'notifications' && renderNotificationsPage(true)}
+
+        {/* ==========================================
+            VIEW C: USERS MANAGEMENT PAGE
+            ========================================== */}
+        {activeTab === 'users' && (() => {
+          const uniquePanchayats = [...new Set(users.map(u => u.panchayat).filter(Boolean))];
+          const filteredUsers = users.filter(u => {
+            const matchesSearch = !userSearchQuery ||
+              u.fullName?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+              u.email?.toLowerCase().includes(userSearchQuery.toLowerCase());
+            const matchesPanchayat = !userPanchayatFilter || u.panchayat === userPanchayatFilter;
+            const matchesStatus = !userStatusFilter || u.status?.toLowerCase() === userStatusFilter.toLowerCase();
+            return matchesSearch && matchesPanchayat && matchesStatus;
+          });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="admin-flex-row" style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-dark)' }}>Users Management</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>Manage registered citizens and account access.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button className="admin-btn secondary" style={{ gap: '6px', height: '40px' }} onClick={fetchUsers}>
+                    <RefreshCw size={14} className={loadingUsers ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Statistics Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Total Users</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-dark)', marginTop: '2px', lineHeight: 1.1 }}>{userStats.totalUsers}</div>
+                  </div>
+                </div>
+
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#f0fdf4', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <UserCheck size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Active Users</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#166534', marginTop: '2px', lineHeight: 1.1 }}>{userStats.activeUsers}</div>
+                  </div>
+                </div>
+
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#fef2f2', color: '#991b1b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <AlertCircle size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Blocked Users</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#991b1b', marginTop: '2px', lineHeight: 1.1 }}>{userStats.blockedUsers}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unified Filter Toolbar */}
+              <div className="unified-filter-toolbar">
+                <div className="search-input-wrapper" style={{ flex: 2, minWidth: '240px' }}>
+                  <Search size={16} className="search-icon" style={{ top: '12px' }} />
+                  <input
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={userSearchQuery}
+                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <select
+                    value={userPanchayatFilter}
+                    onChange={(e) => setUserPanchayatFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="">All Panchayats</option>
+                    {uniquePanchayats.map(panchayat => (
+                      <option key={panchayat} value={panchayat}>{panchayat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <select
+                    value={userStatusFilter}
+                    onChange={(e) => setUserStatusFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Blocked">Blocked</option>
+                  </select>
+                </div>
+
+                <button
+                  className="admin-btn secondary"
+                  onClick={() => {
+                    setUserSearchQuery('');
+                    setUserPanchayatFilter('');
+                    setUserStatusFilter('');
+                  }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {/* Loading / Error / Content State */}
+              {loadingUsers ? (
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <RefreshCw size={28} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                  <p style={{ color: 'var(--text-muted)' }}>Retrieving citizen profiles from Panchayat database...</p>
+                </div>
+              ) : usersError ? (
+                <div className="chart-card" style={{ padding: '40px', textAlign: 'center', borderColor: '#fecaca' }}>
+                  <AlertCircle size={40} style={{ color: '#ef4444', marginBottom: '12px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>Database Synchronization Error</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '8px 0 16px' }}>{usersError}</p>
+                  <button className="admin-btn primary" onClick={fetchUsers}>Retry Fetching</button>
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <div className="chart-card" style={{ padding: '60px 40px', textAlign: 'center' }}>
+                  <FolderOpen size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>No Citizens Found</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '6px', marginBottom: '16px' }}>
+                    {users.length === 0 ? 'The citizen database is currently empty.' : 'No users match the active search filters.'}
+                  </p>
+                  {(userSearchQuery || userPanchayatFilter || userStatusFilter) && (
+                    <button
+                      className="admin-btn secondary"
+                      onClick={() => {
+                        setUserSearchQuery('');
+                        setUserPanchayatFilter('');
+                        setUserStatusFilter('');
+                      }}
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid #edf2f7', borderRadius: '12px' }}>
+                  <table className="admin-table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ paddingLeft: '24px', textAlign: 'left' }}>USER</th>
+                        <th style={{ textAlign: 'left' }}>EMAIL</th>
+                        <th style={{ textAlign: 'left' }}>PHONE</th>
+                        <th style={{ textAlign: 'left' }}>STATUS</th>
+                        <th style={{ textAlign: 'right', paddingRight: '24px' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map(u => {
+                        return (
+                          <tr key={u._id}>
+                            <td style={{ paddingLeft: '24px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                {u.profilePicture ? (
+                                  <img
+                                    src={u.profilePicture.startsWith('http') ? u.profilePicture : `http://localhost:5000${u.profilePicture}`}
+                                    alt={u.fullName}
+                                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <div className="user-avatar-initials" style={{ width: '40px', height: '40px', fontSize: '0.9rem' }}>
+                                    {u.fullName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{u.fullName}</span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{u.role || 'citizen'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: '0.82rem', color: '#475569' }}>{u.email}</span>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>{u.mobile || 'Not provided'}</span>
+                            </td>
+                            <td>
+                              <span className={`badge-status ${(u.status || 'Active').toLowerCase()}`}>
+                                {u.status || 'Active'}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right', paddingRight: '24px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                <button
+                                  className="admin-btn secondary"
+                                  style={{ padding: '0 12px', fontSize: '0.78rem', height: '32px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
+                                  onClick={() => {
+                                    setSelectedUserDetails(null);
+                                    setUserModalOpen(true);
+                                    fetchUserDetails(u._id);
+                                  }}
+                                >
+                                  <Eye size={12} /> View Details
+                                </button>
+                                {u.status?.toLowerCase() === 'blocked' ? (
+                                  <button
+                                    className="admin-btn primary"
+                                    style={{ padding: '0 12px', fontSize: '0.78rem', height: '32px', display: 'inline-flex', alignItems: 'center', background: '#ecfdf5', color: '#10b981' }}
+                                    onClick={() => handleUnblockUser(u._id)}
+                                  >
+                                    Unblock
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="admin-btn danger"
+                                    style={{ padding: '0 12px', fontSize: '0.78rem', height: '32px', display: 'inline-flex', alignItems: 'center', background: '#fee2e2', color: '#ef4444' }}
+                                    onClick={() => {
+                                      const reason = prompt('Please enter a reason for blocking this user (optional):');
+                                      if (reason !== null) {
+                                        handleBlockUser(u._id, reason);
+                                      }
+                                    }}
+                                  >
+                                    Block
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+
+        {/* ==========================================
+            VIEW D: COMMUNITY HUB MANAGEMENT PAGE
+            ========================================== */}
+        {activeTab === 'community' && (() => {
+          const filteredPosts = posts.filter(post => {
+            const matchesSearch = !postSearchQuery ||
+              post.caption?.toLowerCase().includes(postSearchQuery.toLowerCase()) ||
+              post.user?.fullName?.toLowerCase().includes(postSearchQuery.toLowerCase());
+            const matchesStatus = !postStatusFilter || post.status === postStatusFilter;
+            return matchesSearch && matchesStatus;
+          });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="admin-flex-row" style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-dark)' }}>Community Hub</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>Manage community posts and guidelines.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button className="admin-btn secondary" style={{ gap: '6px', height: '40px' }} onClick={fetchPosts}>
+                    <RefreshCw size={14} className={loadingPosts ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Statistics Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Layers size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Total Posts</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-dark)', marginTop: '2px', lineHeight: 1.1 }}>{postStats.totalPosts}</div>
+                  </div>
+                </div>
+
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#fffbeb', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Pending</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b45309', marginTop: '2px', lineHeight: 1.1 }}>{postStats.pendingReview}</div>
+                  </div>
+                </div>
+
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#f0fdf4', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircle size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Approved</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#166534', marginTop: '2px', lineHeight: 1.1 }}>{postStats.approvedPosts}</div>
+                  </div>
+                </div>
+
+                <div className="compact-stat-card">
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#fef2f2', color: '#991b1b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <AlertCircle size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Rejected</div>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#991b1b', marginTop: '2px', lineHeight: 1.1 }}>{postStats.rejectedPosts}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unified Filter Toolbar */}
+              <div className="unified-filter-toolbar">
+                <div className="search-input-wrapper" style={{ flex: 2, minWidth: '240px' }}>
+                  <Search size={16} className="search-icon" style={{ top: '12px' }} />
+                  <input
+                    type="text"
+                    placeholder="Search by caption or author name..."
+                    value={postSearchQuery}
+                    onChange={(e) => setPostSearchQuery(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <select
+                    value={postStatusFilter}
+                    onChange={(e) => setPostStatusFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <button
+                  className="admin-btn secondary"
+                  onClick={() => {
+                    setPostSearchQuery('');
+                    setPostStatusFilter('');
+                  }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {/* Loading / Error / Empty States */}
+              {loadingPosts ? (
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <RefreshCw size={28} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                  <p style={{ color: 'var(--text-muted)' }}>Retrieving community posts from database...</p>
+                </div>
+              ) : postsError ? (
+                <div className="chart-card" style={{ padding: '40px', textAlign: 'center', borderColor: '#fecaca' }}>
+                  <AlertCircle size={40} style={{ color: '#ef4444', marginBottom: '12px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>Database Synchronization Error</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '8px 0 16px' }}>{postsError}</p>
+                  <button className="admin-btn primary" onClick={fetchPosts}>Retry Fetching</button>
+                </div>
+              ) : filteredPosts.length === 0 ? (
+                <div className="chart-card" style={{ padding: '60px 40px', textAlign: 'center' }}>
+                  <FolderOpen size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>No Posts Found</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '6px', marginBottom: '16px' }}>
+                    {posts.length === 0 ? 'The community hub database is currently empty.' : 'No posts match the active search filters.'}
+                  </p>
+                  {(postSearchQuery || postStatusFilter) && (
+                    <button
+                      className="admin-btn secondary"
+                      onClick={() => {
+                        setPostSearchQuery('');
+                        setPostStatusFilter('');
+                      }}
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="community-grid">
+                  {filteredPosts.map(post => {
+                    const postImage = post.image ? (post.image.startsWith('http') ? post.image : `http://localhost:5000${post.image}`) : null;
+                    return (
+                      <div key={post._id} className="post-card">
+                        {postImage ? (
+                          <img src={postImage} alt="post media" className="post-card-img" />
+                        ) : (
+                          <div style={{ height: '180px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                            <FolderOpen size={48} />
+                          </div>
+                        )}
+                        <div className="post-card-body">
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                              Category: {post.category || 'General'}
+                            </span>
+                            <span className={`badge-status ${(post.status || 'Pending').toLowerCase()}`}>
+                              {post.status || 'Pending'}
+                            </span>
+                          </div>
+                          <p className="post-card-caption" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {post.caption}
+                          </p>
+                          <div style={{ marginTop: 'auto', borderTop: '1px solid #edf2f7', paddingTop: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b' }}>
+                              <span>By: <strong>{post.user?.fullName || 'Citizen'}</strong></span>
+                              <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                              <span>👍 {post.likes || 0} Likes</span>
+                              <span>💬 {post.commentsCount || post.comments?.length || 0} Comments</span>
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '16px', borderTop: '1px solid #edf2f7', paddingTop: '12px' }}>
+                            <button
+                              className="admin-btn secondary"
+                              style={{ flex: 1, padding: '0 8px', fontSize: '0.75rem', height: '32px', border: '1px solid #e2e8f0', background: '#f8fafc' }}
+                              onClick={() => {
+                                setSelectedPostDetails(post);
+                                setPostModalOpen(true);
+                              }}
+                            >
+                              Details
+                            </button>
+                            {post.status === 'Pending' && (
+                              <>
+                                <button
+                                  className="admin-btn primary"
+                                  style={{ flex: 1, padding: '0 8px', fontSize: '0.75rem', height: '32px', background: '#ecfdf5', color: '#10b981' }}
+                                  onClick={() => handleApprovePost(post._id)}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="admin-btn danger"
+                                  style={{ flex: 1, padding: '0 8px', fontSize: '0.75rem', height: '32px', background: '#fee2e2', color: '#ef4444' }}
+                                  onClick={() => handleRejectPost(post._id)}
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            <button
+                              className="admin-btn danger"
+                              style={{ padding: '0 8px', fontSize: '0.75rem', height: '32px', background: '#fee2e2', color: '#ef4444' }}
+                              onClick={() => handleDeletePost(post._id)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
 
         {/* ==========================================
             VIEW A: DASHBOARD HOME
@@ -1499,9 +2145,9 @@ export default function AdminDashboard() {
                 <button className="admin-btn secondary" style={{ gap: '6px' }} onClick={handleRefresh}>
                   <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Refresh
                 </button>
-                <button 
-                  className="admin-btn secondary" 
-                  style={{ gap: '6px' }} 
+                <button
+                  className="admin-btn secondary"
+                  style={{ gap: '6px' }}
                   onClick={handleExportComplaints}
                   disabled={isExporting}
                 >
@@ -1773,7 +2419,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
-            
+
             {/* Expanded details overlay removed per requirements */}
           </div>
         )}
@@ -1804,12 +2450,12 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                
+
                 {/* PAGE HEADER */}
                 <div>
                   <div style={{ marginBottom: '8px' }}>
-                    <a 
-                      href="#admin/complaints" 
+                    <a
+                      href="#admin/complaints"
                       onClick={(e) => { e.preventDefault(); window.location.hash = '#admin/complaints'; }}
                       style={{ fontSize: '0.88rem', fontWeight: 700, color: '#3b82f6', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
@@ -1912,8 +2558,8 @@ export default function AdminDashboard() {
                   {detailsComplaint.images && detailsComplaint.images.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '16px' }}>
                       {detailsComplaint.images.map((img, idx) => (
-                        <div 
-                          key={idx} 
+                        <div
+                          key={idx}
                           onClick={() => { setActiveImageIndex(idx); setIsFullscreenOpen(true); }}
                           className="zoom-image-container"
                           style={{ height: '100px', borderRadius: '8px', cursor: 'zoom-in', border: '1px solid #e2e8f0', overflow: 'hidden' }}
@@ -2138,8 +2784,8 @@ export default function AdminDashboard() {
                       style={{ background: '#db2777', padding: '10px 18px', fontSize: '0.85rem' }}
                       onClick={handleAssignDeptSubmit}
                       disabled={
-                        detailsComplaint.status !== 'Verified' && 
-                        detailsComplaint.status !== 'Assigned' && 
+                        detailsComplaint.status !== 'Verified' &&
+                        detailsComplaint.status !== 'Assigned' &&
                         detailsComplaint.status !== 'In Progress'
                       }
                     >
@@ -2276,22 +2922,22 @@ export default function AdminDashboard() {
         {isFullscreenOpen && detailsComplaint && detailsComplaint.images && detailsComplaint.images.length > 0 && (
           <div className="admin-modal-overlay" style={{ background: 'rgba(15,23,42,0.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
             <div style={{ position: 'relative', width: '80%', height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <img 
-                src={detailsComplaint.images[activeImageIndex]} 
-                alt="evidence magnified" 
-                style={{ 
-                  maxWidth: '100%', 
-                  maxHeight: '100%', 
-                  objectFit: 'contain', 
+              <img
+                src={detailsComplaint.images[activeImageIndex]}
+                alt="evidence magnified"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
                   borderRadius: '12px',
                   transform: `scale(${zoomScale})`,
                   transition: 'transform 0.2s ease'
-                }} 
+                }}
               />
 
               {detailsComplaint.images.length > 1 && (
                 <>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setActiveImageIndex(prev => (prev === 0 ? detailsComplaint.images.length - 1 : prev - 1));
@@ -2301,7 +2947,7 @@ export default function AdminDashboard() {
                   >
                     <ChevronLeft size={24} />
                   </button>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setActiveImageIndex(prev => (prev === detailsComplaint.images.length - 1 ? 0 : prev + 1));
@@ -2316,26 +2962,26 @@ export default function AdminDashboard() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '24px', background: 'rgba(255,255,255,0.1)', padding: '10px 24px', borderRadius: '30px' }}>
-              <button 
+              <button
                 onClick={() => setZoomScale(prev => Math.min(prev + 0.25, 3))}
                 style={{ color: '#fff', background: 'transparent', border: 'none', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
               >
                 Zoom In (+)
               </button>
-              <button 
+              <button
                 onClick={() => setZoomScale(prev => Math.max(prev - 0.25, 0.5))}
                 style={{ color: '#fff', background: 'transparent', border: 'none', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
               >
                 Zoom Out (-)
               </button>
-              <button 
+              <button
                 onClick={() => setZoomScale(1)}
                 style={{ color: '#fff', background: 'transparent', border: 'none', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
               >
                 Reset Zoom
               </button>
-              <a 
-                href={detailsComplaint.images[activeImageIndex]} 
+              <a
+                href={detailsComplaint.images[activeImageIndex]}
                 download={`complaint-evidence-${activeImageIndex + 1}.jpg`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -2343,7 +2989,7 @@ export default function AdminDashboard() {
               >
                 <Download size={14} /> Download
               </a>
-              <button 
+              <button
                 onClick={() => { setIsFullscreenOpen(false); setZoomScale(1); }}
                 style={{ color: '#ef4444', background: 'transparent', border: 'none', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer' }}
               >
@@ -2353,7 +2999,309 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* User Account Details Modal */}
+        {userModalOpen && (
+          <div className="admin-modal-overlay" onClick={() => setUserModalOpen(false)}>
+            <div className="admin-modal-container" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-dark)' }}>User Profile & Activity Logs</h3>
+                <button
+                  onClick={() => setUserModalOpen(false)}
+                  style={{ background: 'transparent', border: 'none', fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              {loadingUserDetails || !selectedUserDetails ? (
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 8px' }} />
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading user history details...</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Category A: Personal Information */}
+                  <div className="user-details-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
+                    <h4 className="user-details-title">Personal Information</h4>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: '#f8fafc', borderRadius: '12px', marginBottom: '16px' }}>
+                      {selectedUserDetails.profilePicture ? (
+                        <img
+                          src={selectedUserDetails.profilePicture.startsWith('http') ? selectedUserDetails.profilePicture : `http://localhost:5000${selectedUserDetails.profilePicture}`}
+                          alt={selectedUserDetails.fullName}
+                          style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div className="user-avatar-initials" style={{ width: '64px', height: '64px', fontSize: '1.3rem' }}>
+                          {selectedUserDetails.fullName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-dark)' }}>{selectedUserDetails.fullName || 'Not provided'}</h3>
+                        <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          ID: {selectedUserDetails._id}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="user-details-grid">
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Full Name</span>
+                        <span className="user-detail-value">{selectedUserDetails.fullName || 'Not provided'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Email Address</span>
+                        <span className="user-detail-value">{selectedUserDetails.email || 'Not provided'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Phone Number</span>
+                        <span className="user-detail-value">{selectedUserDetails.mobile || 'Not provided'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category B: LOCATION */}
+                  <div className="user-details-section">
+                    <h4 className="user-details-title">Location</h4>
+                    <div className="user-details-grid">
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Panchayat</span>
+                        <span className="user-detail-value">{selectedUserDetails.panchayat || 'Not provided'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">District</span>
+                        <span className="user-detail-value">{selectedUserDetails.district || 'Not provided'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Village / Local Body</span>
+                        <span className="user-detail-value">
+                          {selectedUserDetails.localBody || selectedUserDetails.city || 'Not provided'}
+                        </span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">PIN Code</span>
+                        <span className="user-detail-value">{selectedUserDetails.pinCode || 'Not provided'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category C: ACCOUNT */}
+                  <div className="user-details-section">
+                    <h4 className="user-details-title">Account</h4>
+                    <div className="user-details-grid">
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Role</span>
+                        <span className="user-detail-value" style={{ textTransform: 'capitalize' }}>
+                          {selectedUserDetails.role || 'citizen'}
+                        </span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Account Status</span>
+                        <span className="user-detail-value">
+                          <span className={`badge-status ${(selectedUserDetails.status || 'Active').toLowerCase()}`}>
+                            {selectedUserDetails.status || 'Active'}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Joined Date</span>
+                        <span className="user-detail-value">
+                          {selectedUserDetails.createdAt ? new Date(selectedUserDetails.createdAt).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'long',
+                            year: 'numeric'
+                          }) : 'Not provided'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer Toggles */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px', marginTop: '8px' }}>
+                    <button className="admin-btn secondary" onClick={() => setUserModalOpen(false)}>
+                      Close Details
+                    </button>
+                    {selectedUserDetails.status?.toLowerCase() === 'blocked' ? (
+                      <button
+                        className="admin-btn primary"
+                        style={{ background: '#10b981' }}
+                        onClick={() => handleUnblockUser(selectedUserDetails._id)}
+                      >
+                        Unblock Citizen
+                      </button>
+                    ) : (
+                      <button
+                        className="admin-btn danger"
+                        onClick={() => {
+                          const reason = prompt('Please enter a reason for blocking this user (optional):');
+                          if (reason !== null) {
+                            handleBlockUser(selectedUserDetails._id, reason);
+                          }
+                        }}
+                      >
+                        Block Citizen
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Community Post Details Modal */}
+        {postModalOpen && selectedPostDetails && (
+          <div className="admin-modal-overlay" onClick={() => setPostModalOpen(false)}>
+            <div className="admin-modal-container" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '650px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-dark)' }}>Community Post Details</h3>
+                <button
+                  onClick={() => setPostModalOpen(false)}
+                  style={{ background: 'transparent', border: 'none', fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
+                {/* Author Info */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid #edf2f7' }}>
+                  {selectedPostDetails.user?.profilePicture ? (
+                    <img
+                      src={selectedPostDetails.user.profilePicture.startsWith('http') ? selectedPostDetails.user.profilePicture : `http://localhost:5000${selectedPostDetails.user.profilePicture}`}
+                      alt={selectedPostDetails.user?.fullName}
+                      style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div className="user-avatar-initials" style={{ width: '48px', height: '48px', fontSize: '1.1rem' }}>
+                      {selectedPostDetails.user?.fullName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'C'}
+                    </div>
+                  )}
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-dark)' }}>{selectedPostDetails.user?.fullName || 'Citizen'}</h4>
+                    <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      District: {selectedPostDetails.user?.district || 'Not provided'} &bull; Role: {selectedPostDetails.user?.role || 'Citizen'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Post Content */}
+                <div>
+                  <p style={{ fontSize: '0.92rem', color: 'var(--text-dark)', lineHeight: 1.6, whiteSpace: 'pre-line', margin: '0 0 16px 0' }}>
+                    {selectedPostDetails.caption}
+                  </p>
+
+                  {selectedPostDetails.image && (
+                    <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
+                      <img
+                        src={selectedPostDetails.image.startsWith('http') ? selectedPostDetails.image : `http://localhost:5000${selectedPostDetails.image}`}
+                        alt="Community Post"
+                        style={{ width: '100%', maxHeight: '350px', objectFit: 'contain', background: '#f8fafc' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Meta details */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Status</span>
+                    <div style={{ marginTop: '4px' }}>
+                      <span className={`badge-status ${(selectedPostDetails.status || 'Pending').toLowerCase()}`}>
+                        {selectedPostDetails.status || 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Visibility</span>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-dark)', marginTop: '4px' }}>{selectedPostDetails.visibility || 'Public'}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Likes Count</span>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-dark)', marginTop: '4px' }}>👍 {selectedPostDetails.likes || 0}</div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Posted Date</span>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-dark)', marginTop: '4px' }}>
+                      {new Date(selectedPostDetails.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comments Section */}
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Comments ({selectedPostDetails.comments?.length || 0})
+                  </h4>
+                  {selectedPostDetails.comments && selectedPostDetails.comments.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {selectedPostDetails.comments.map((comment) => (
+                        <div key={comment._id} style={{ display: 'flex', gap: '8px', padding: '8px', background: '#f8fafc', borderRadius: '8px' }}>
+                          <div className="user-avatar-initials" style={{ width: '32px', height: '32px', fontSize: '0.8rem', minWidth: '32px' }}>
+                            {comment.user?.fullName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'C'}
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{comment.user?.fullName || 'Citizen'}</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#334155' }}>{comment.text}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, padding: '12px', background: '#f8fafc', borderRadius: '8px', textAlign: 'center' }}>
+                      No comments have been posted yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px', marginTop: '20px' }}>
+                <button className="admin-btn secondary" onClick={() => setPostModalOpen(false)}>
+                  Close
+                </button>
+                {selectedPostDetails.status === 'Pending' && (
+                  <>
+                    <button
+                      className="admin-btn primary"
+                      style={{ background: '#10b981' }}
+                      onClick={() => {
+                        handleApprovePost(selectedPostDetails._id);
+                        setPostModalOpen(false);
+                      }}
+                    >
+                      Approve Post
+                    </button>
+                    <button
+                      className="admin-btn danger"
+                      onClick={() => {
+                        handleRejectPost(selectedPostDetails._id);
+                        setPostModalOpen(false);
+                      }}
+                    >
+                      Reject Post
+                    </button>
+                  </>
+                )}
+                <button
+                  className="admin-btn danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => {
+                    handleDeletePost(selectedPostDetails._id);
+                  }}
+                >
+                  <Trash2 size={14} /> Delete Post
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
       </main>
+
     </div>
   );
 }

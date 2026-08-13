@@ -21,6 +21,14 @@ const getProfile = asyncHandler(async (req, res) => {
       email: user.email,
       mobile: user.mobile || '',
       address: user.address || '',
+      houseName: user.houseName || '',
+      street: user.street || '',
+      landmark: user.landmark || '',
+      pinCode: user.pinCode || '',
+      district: user.district || '',
+      localBody: user.localBody || '',
+      localBodyType: user.localBodyType || '',
+      ward: user.ward || '',
       role: user.role,
       authProvider: user.authProvider || 'local',
       profilePicture: user.profilePicture || '',
@@ -33,10 +41,35 @@ const getProfile = asyncHandler(async (req, res) => {
 // @route   PUT /api/profile
 // @access  Private
 const updateProfile = asyncHandler(async (req, res) => {
-  const { fullName, mobile, address } = req.body;
+  const { fullName, mobile, address, district, localBody, localBodyType, ward, houseName, street, landmark, pinCode } = req.body;
 
   if (!fullName) {
     return res.status(400).json({ success: false, message: 'Full name is required' });
+  }
+
+  // Location fields validations
+  if (!district || !district.trim()) {
+    return res.status(400).json({ success: false, message: 'District is required' });
+  }
+  if (!localBody || !localBody.trim()) {
+    return res.status(400).json({ success: false, message: 'Local Body is required' });
+  }
+  if (!ward || !ward.trim()) {
+    return res.status(400).json({ success: false, message: 'Ward is required' });
+  }
+
+  // Address fields validations
+  if (!houseName || !houseName.trim()) {
+    return res.status(400).json({ success: false, message: 'House Name / Building Name is required' });
+  }
+  if (!street || !street.trim()) {
+    return res.status(400).json({ success: false, message: 'Street / Locality is required' });
+  }
+  if (!pinCode || !pinCode.trim()) {
+    return res.status(400).json({ success: false, message: 'PIN Code is required' });
+  }
+  if (!/^\d{6}$/.test(pinCode.trim())) {
+    return res.status(400).json({ success: false, message: 'PIN Code must be a valid 6-digit Indian PIN format' });
   }
 
   const user = await User.findById(req.user._id);
@@ -47,6 +80,14 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   user.fullName = fullName.trim();
   user.address = (address || '').trim();
+  user.district = district.trim();
+  user.localBody = localBody.trim();
+  user.localBodyType = (localBodyType || '').trim();
+  user.ward = ward.trim();
+  user.houseName = houseName.trim();
+  user.street = street.trim();
+  user.landmark = (landmark || '').trim();
+  user.pinCode = pinCode.trim();
 
   // Mobile number validation (if auth is local or if mobile is provided)
   if (mobile !== undefined) {
@@ -71,6 +112,14 @@ const updateProfile = asyncHandler(async (req, res) => {
       email: user.email,
       mobile: user.mobile || '',
       address: user.address || '',
+      houseName: user.houseName || '',
+      street: user.street || '',
+      landmark: user.landmark || '',
+      pinCode: user.pinCode || '',
+      district: user.district || '',
+      localBody: user.localBody || '',
+      localBodyType: user.localBodyType || '',
+      ward: user.ward || '',
       role: user.role,
       authProvider: user.authProvider || 'local',
       profilePicture: user.profilePicture || '',

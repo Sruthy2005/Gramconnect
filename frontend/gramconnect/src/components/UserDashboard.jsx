@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Globe, ChevronDown, User, Cpu, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle, Menu, Bell, PlusCircle, Search, FileText, LayoutDashboard, Megaphone, Settings, LogOut, Calendar, Info, AlertCircle, Trash2, Check, CheckCheck, ArrowRight } from 'lucide-react';
+import { Globe, ChevronDown, User, Cpu, Users, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle, Menu, Bell, PlusCircle, Search, FileText, LayoutDashboard, Megaphone, Settings, LogOut, Calendar, Info, AlertCircle, Trash2, Check, CheckCheck, ArrowRight } from 'lucide-react';
 import { GramConnectIcon } from './GramConnectLogo';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import ProfilePage from './ProfilePage';
 import ReportIssuePage from './ReportIssuePage';
 import MyComplaintsPage from './MyComplaintsPage';
+import UserCommunityHub from './CommunityHub/UserCommunityHub';
 import './UserDashboard.css';
 
 export default function UserDashboard() {
@@ -778,7 +779,7 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'hub' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/hub'; setSidebarOpen(false); }}
           >
-            <Cpu size={18} />
+            <Users size={18} />
             <span>{t('dashboard.menu.community_hub')}</span>
           </button>
 
@@ -833,6 +834,8 @@ export default function UserDashboard() {
           <MyComplaintsPage />
         ) : activeTab === 'notifications' ? (
           renderNotificationsPage(false)
+        ) : activeTab === 'hub' ? (
+          <UserCommunityHub />
         ) : (
           <>
             {/* Section 1: Welcome Header Card & Profile Summary Card (Requirement 4) */}

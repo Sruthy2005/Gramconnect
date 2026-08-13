@@ -11,6 +11,7 @@ const { createNotification } = require('../utils/notificationHelper');
 // @access  Private
 const getNotifications = asyncHandler(async (req, res) => {
   const userRole = req.user.role ? req.user.role.toLowerCase() : 'citizen';
+  const userDistrict = req.user.district || 'Ernakulam';
   
   const notifications = await Notification.find({
     $or: [
@@ -18,7 +19,14 @@ const getNotifications = asyncHandler(async (req, res) => {
       { 
         $and: [
           { recipientUser: null },
-          { recipientRole: userRole === 'admin' ? { $in: ['admin', 'Admin'] } : { $in: ['citizen', 'Citizen'] } }
+          { recipientRole: userRole === 'admin' ? { $in: ['admin', 'Admin'] } : { $in: ['citizen', 'Citizen'] } },
+          {
+            $or: [
+              { districtTarget: { $exists: false } },
+              { districtTarget: 'ALL' },
+              { districtTarget: userDistrict }
+            ]
+          }
         ]
       }
     ]
@@ -37,6 +45,7 @@ const getNotifications = asyncHandler(async (req, res) => {
 // @access  Private
 const getUnreadCount = asyncHandler(async (req, res) => {
   const userRole = req.user.role ? req.user.role.toLowerCase() : 'citizen';
+  const userDistrict = req.user.district || 'Ernakulam';
   
   const count = await Notification.countDocuments({
     isRead: false,
@@ -45,7 +54,14 @@ const getUnreadCount = asyncHandler(async (req, res) => {
       { 
         $and: [
           { recipientUser: null },
-          { recipientRole: userRole === 'admin' ? { $in: ['admin', 'Admin'] } : { $in: ['citizen', 'Citizen'] } }
+          { recipientRole: userRole === 'admin' ? { $in: ['admin', 'Admin'] } : { $in: ['citizen', 'Citizen'] } },
+          {
+            $or: [
+              { districtTarget: { $exists: false } },
+              { districtTarget: 'ALL' },
+              { districtTarget: userDistrict }
+            ]
+          }
         ]
       }
     ]
@@ -172,6 +188,7 @@ const streamNotifications = async (req, res) => {
     const client = {
       userId: user._id.toString(),
       role: user.role ? user.role.toLowerCase() : 'citizen',
+      district: user.district || 'Ernakulam',
       res
     };
 

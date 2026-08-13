@@ -19,9 +19,18 @@ export default function App() {
       const targetHash = `#dashboard${subpath}`;
       window.history.replaceState(null, '', `/${targetHash}`);
       setRoute(targetHash);
+    } else if (window.location.pathname.startsWith('/community')) {
+      const targetHash = '#dashboard/hub';
+      window.history.replaceState(null, '', `/${targetHash}`);
+      setRoute(targetHash);
     } else if (window.location.pathname.startsWith('/admin/complaints')) {
       const subpath = window.location.pathname.substring(17);
       const targetHash = subpath ? `#admin/complaints${subpath}` : '#admin/complaints';
+      window.history.replaceState(null, '', `/${targetHash}`);
+      setRoute(targetHash);
+    } else if (window.location.pathname.startsWith('/admin/community')) {
+      const subpath = window.location.pathname.substring(16);
+      const targetHash = subpath ? `#admin/community${subpath}` : '#admin/community';
       window.history.replaceState(null, '', `/${targetHash}`);
       setRoute(targetHash);
     } else if (window.location.pathname.startsWith('/admin/dashboard') || window.location.pathname === '/admin') {
@@ -39,6 +48,34 @@ export default function App() {
       window.removeEventListener('hashchange', handleHashChange);
     };
   }, []);
+
+  // Centralized Google Identity Services Initialization
+  useEffect(() => {
+    let checkInterval;
+    const initGoogleGsi = () => {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        clearInterval(checkInterval);
+        console.log('[DEV] Centralized Google Identity Services Initializing...');
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: (response) => {
+            console.log('[DEV] Centralized Google Auth Callback triggered.');
+            if (window.handleGoogleLoginSuccess) {
+              window.handleGoogleLoginSuccess(response);
+            } else {
+              console.warn('[DEV] Centralized Google Auth callback fired, but handleGoogleLoginSuccess is not set.');
+            }
+          }
+        });
+      }
+    };
+
+    initGoogleGsi();
+    checkInterval = setInterval(initGoogleGsi, 100);
+
+    return () => clearInterval(checkInterval);
+  }, []);
+
 
   // Central Auth Routing Protection (Requirement 3, 4, 5 & Admin Role Guard)
   useEffect(() => {

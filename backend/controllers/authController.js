@@ -65,9 +65,19 @@ const registerUser = asyncHandler(async (req, res) => {
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
-      mobile: user.mobile,
+      mobile: user.mobile || '',
       role: user.role,
       isVerified: user.isVerified,
+      profilePicture: user.profilePicture || '',
+      address: user.address || '',
+      houseName: user.houseName || '',
+      street: user.street || '',
+      landmark: user.landmark || '',
+      pinCode: user.pinCode || '',
+      district: user.district || '',
+      localBody: user.localBody || '',
+      localBodyType: user.localBodyType || '',
+      ward: user.ward || '',
       token
     });
   } else {
@@ -86,18 +96,33 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   // Find user by email
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email, isDeleted: { $ne: true } });
 
   if (user && (await user.matchPassword(password))) {
+    if (user.status === 'Blocked' || user.status === 'blocked') {
+      return res.status(403).json({ message: 'Your account has been blocked. Reason: ' + (user.blockedReason || 'No reason specified') });
+    }
+    user.lastLogin = new Date();
+    await user.save();
     const token = generateToken(res, user._id);
 
     res.status(200).json({
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
-      mobile: user.mobile,
+      mobile: user.mobile || '',
       role: user.role,
       isVerified: user.isVerified,
+      profilePicture: user.profilePicture || '',
+      address: user.address || '',
+      houseName: user.houseName || '',
+      street: user.street || '',
+      landmark: user.landmark || '',
+      pinCode: user.pinCode || '',
+      district: user.district || '',
+      localBody: user.localBody || '',
+      localBodyType: user.localBodyType || '',
+      ward: user.ward || '',
       token
     });
   } else {
@@ -131,7 +156,15 @@ const getUserProfile = asyncHandler(async (req, res) => {
       role: user.role,
       isVerified: user.isVerified,
       profilePicture: user.profilePicture || '',
-      address: user.address || ''
+      address: user.address || '',
+      houseName: user.houseName || '',
+      street: user.street || '',
+      landmark: user.landmark || '',
+      pinCode: user.pinCode || '',
+      district: user.district || '',
+      localBody: user.localBody || '',
+      localBodyType: user.localBodyType || '',
+      ward: user.ward || ''
     });
   } else {
     res.status(404).json({ message: 'User not found' });
@@ -442,7 +475,7 @@ const googleLogin = asyncHandler(async (req, res) => {
     }
 
     // Check whether the user already exists in MongoDB
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email, isDeleted: { $ne: true } });
 
     if (!user) {
       console.log('[DEV] User does not exist in MongoDB. Creating new record...');
@@ -474,6 +507,12 @@ const googleLogin = asyncHandler(async (req, res) => {
       }
     }
 
+    if (user && (user.status === 'Blocked' || user.status === 'blocked')) {
+      return res.status(403).json({ success: false, message: 'Your account has been blocked. Reason: ' + (user.blockedReason || 'No reason specified') });
+    }
+    user.lastLogin = new Date();
+    await user.save();
+
     // Generate JWT token
     const jwtToken = generateToken(res, user._id);
 
@@ -488,7 +527,16 @@ const googleLogin = asyncHandler(async (req, res) => {
         mobile: user.mobile || '',
         role: user.role,
         isVerified: user.isVerified,
-        profilePicture: user.profilePicture || ''
+        profilePicture: user.profilePicture || '',
+        address: user.address || '',
+        houseName: user.houseName || '',
+        street: user.street || '',
+        landmark: user.landmark || '',
+        pinCode: user.pinCode || '',
+        district: user.district || '',
+        localBody: user.localBody || '',
+        localBodyType: user.localBodyType || '',
+        ward: user.ward || ''
       }
     });
   } catch (error) {

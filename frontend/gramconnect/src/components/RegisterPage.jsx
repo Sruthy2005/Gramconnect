@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe, ChevronDown, User, Cpu, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle } from 'lucide-react';
-import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { GramConnectIcon } from './GramConnectLogo';
 import api from '../utils/api';
@@ -29,7 +28,7 @@ const decodeJwt = (token) => {
 export default function RegisterPage() {
   const { t, i18n } = useTranslation();
   const { fetchProfile } = useAuth();
-  
+
   // Form states
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -53,7 +52,7 @@ export default function RegisterPage() {
   const showToast = (message, type = 'success') => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
-    
+
     // Auto remove after 3s
     setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -89,6 +88,40 @@ export default function RegisterPage() {
     } else {
       console.log(`[DEV] Google Client ID loaded: "${clientId}"`);
     }
+  }, []);
+
+  // Handle GSI button rendering and callback binding
+  useEffect(() => {
+    let checkInterval;
+    const renderGoogleBtn = () => {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        clearInterval(checkInterval);
+        console.log('[DEV] Rendering Google Sign-In button...');
+        window.google.accounts.id.renderButton(
+          document.getElementById('google-signin-button-register'),
+          {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            shape: 'rectangular',
+            width: '400'
+          }
+        );
+      }
+    };
+
+    renderGoogleBtn();
+    checkInterval = setInterval(renderGoogleBtn, 100);
+
+    window.handleGoogleLoginSuccess = (response) => {
+      console.log('[DEV] RegisterPage received GSI success credential.');
+      handleGoogleSuccess(response);
+    };
+
+    return () => {
+      clearInterval(checkInterval);
+      window.handleGoogleLoginSuccess = null;
+    };
   }, []);
 
   const handleGoogleSuccess = async (credentialResponse) => {
@@ -183,7 +216,7 @@ export default function RegisterPage() {
     }
 
     let score = 0;
-    
+
     // Criteria checks
     if (password.length >= 8) score++;
     if (/[A-Z]/.test(password)) score++;
@@ -462,10 +495,10 @@ export default function RegisterPage() {
     if (checkFormValidity()) {
       setIsLoading(true);
       setErrors({});
-      
+
       const nameCleaned = name.trim().replace(/\s+/g, ' ');
       const emailCleaned = email.trim();
-      
+
       let digits = phone.trim();
       if (digits.startsWith('+91')) {
         digits = digits.substring(3);
@@ -495,7 +528,7 @@ export default function RegisterPage() {
     } else {
       // Focus on the first invalid field
       const fieldsOrder = ['name', 'email', 'phone', 'password', 'confirmPassword', 'agreeToTerms'];
-      
+
       const firstInvalidField = fieldsOrder.find((field) => {
         if (field === 'name') {
           const nameCleaned = name.trim().replace(/\s+/g, ' ');
@@ -609,9 +642,9 @@ export default function RegisterPage() {
         <div className="register-illustration-container">
           <div className="register-illustration-card">
             {/* SVG Background scenery */}
-            <svg 
-              viewBox="0 0 500 500" 
-              className="register-scenery-bg" 
+            <svg
+              viewBox="0 0 500 500"
+              className="register-scenery-bg"
               xmlns="http://www.w3.org/2000/svg"
             >
               <defs>
@@ -714,8 +747,8 @@ export default function RegisterPage() {
 
             {/* Floating absolute glass cards */}
             {/* Citizen Node */}
-            <div 
-              className="glass-card register-node-card-1 node-glow-green" 
+            <div
+              className="glass-card register-node-card-1 node-glow-green"
               style={{
                 position: 'absolute',
                 top: '40px',
@@ -737,8 +770,8 @@ export default function RegisterPage() {
             </div>
 
             {/* AI Analysis Node */}
-            <div 
-              className="glass-card register-node-card-2 node-glow-blue" 
+            <div
+              className="glass-card register-node-card-2 node-glow-blue"
               style={{
                 position: 'absolute',
                 top: '40px',
@@ -760,8 +793,8 @@ export default function RegisterPage() {
             </div>
 
             {/* Department Officer Node */}
-            <div 
-              className="glass-card register-node-card-3 node-glow-green" 
+            <div
+              className="glass-card register-node-card-3 node-glow-green"
               style={{
                 position: 'absolute',
                 bottom: '80px',
@@ -783,8 +816,8 @@ export default function RegisterPage() {
             </div>
 
             {/* Issue Resolved Node */}
-            <div 
-              className="glass-card register-node-card-4 node-glow-blue" 
+            <div
+              className="glass-card register-node-card-4 node-glow-blue"
               style={{
                 position: 'absolute',
                 bottom: '80px',
@@ -939,7 +972,7 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              
+
               {/* Password Strength Meter */}
               {password && (
                 <>
@@ -951,7 +984,7 @@ export default function RegisterPage() {
                   </div>
                 </>
               )}
-              
+
               {errors.password && (
                 <span className="error-message-inline">
                   <AlertTriangle size={12} /> {errors.password}
@@ -1050,15 +1083,7 @@ export default function RegisterPage() {
               <span>{t('register.google_btn')}</span>
             </button>
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.01, overflow: 'hidden', zIndex: 10 }}>
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                type="standard"
-                theme="outline"
-                size="large"
-                shape="rectangular"
-                width="400"
-              />
+              <div id="google-signin-button-register" style={{ width: '100%', height: '100%' }}></div>
             </div>
           </div>
 
