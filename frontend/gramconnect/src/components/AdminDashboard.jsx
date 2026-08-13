@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Calendar,
   MapPin,
+  Phone,
   UserCheck,
   Eye,
   Check,
@@ -61,6 +62,7 @@ export default function AdminDashboard() {
     if (hash.startsWith('#admin/complaints')) return 'complaints';
     if (hash === '#admin/users') return 'users';
     if (hash === '#admin/community') return 'community';
+    if (hash === '#admin/lost-found') return 'lost_found';
     return 'dashboard';
   });
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
@@ -131,6 +133,16 @@ export default function AdminDashboard() {
   const [loadingPostDetails, setLoadingPostDetails] = useState(false);
   const [postModalOpen, setPostModalOpen] = useState(false);
 
+  // Lost & Found states
+  const [lostFoundItems, setLostFoundItems] = useState([]);
+  const [loadingLostFound, setLoadingLostFound] = useState(false);
+  const [lostFoundError, setLostFoundError] = useState(null);
+  const [lostFoundSearchQuery, setLostFoundSearchQuery] = useState('');
+  const [lostFoundTypeFilter, setLostFoundTypeFilter] = useState('All');
+  const [lostFoundStatusFilter, setLostFoundStatusFilter] = useState('All');
+  const [selectedLostFoundItem, setSelectedLostFoundItem] = useState(null);
+  const [lostFoundModalOpen, setLostFoundModalOpen] = useState(false);
+
 
   // Filter States (Complaint Management)
   const [searchQuery, setSearchQuery] = useState('');
@@ -183,6 +195,9 @@ export default function AdminDashboard() {
     } else if (hash === '#admin/community') {
       setViewingComplaintId(null);
       setActiveTab('community');
+    } else if (hash === '#admin/lost-found') {
+      setViewingComplaintId(null);
+      setActiveTab('lost_found');
     } else {
       setViewingComplaintId(null);
       setActiveTab('dashboard');
@@ -192,7 +207,18 @@ export default function AdminDashboard() {
   useEffect(() => {
     handleHashRouting();
     window.addEventListener('hashchange', handleHashRouting);
-    return () => window.removeEventListener('hashchange', handleHashRouting);
+    
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setLostFoundModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashRouting);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Fetch live statistics and all complaints
@@ -377,6 +403,54 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchLostFoundItems = async () => {
+    setLoadingLostFound(true);
+    setLostFoundError(null);
+    try {
+      const res = await api.get('/lost-found');
+      if (res.data && res.data.success) {
+        setLostFoundItems(res.data.items || []);
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to load lost/found items:', err);
+      setLostFoundError(err.message || 'Failed to retrieve reports from Lost & Found database.');
+      showToast('Error fetching Lost & Found database.', 'error');
+    } finally {
+      setLoadingLostFound(false);
+    }
+  };
+
+  const handleResolveLostFound = async (itemId, status) => {
+    try {
+      const res = await api.put(`/lost-found/${itemId}`, { status });
+      if (res.data && res.data.success) {
+        showToast(`Item status updated to ${status}.`);
+        fetchLostFoundItems();
+        if (selectedLostFoundItem && selectedLostFoundItem._id === itemId) {
+          setSelectedLostFoundItem(res.data.item);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update item status.', 'error');
+    }
+  };
+
+  const handleDeleteLostFoundItem = async (itemId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this report?')) return;
+    try {
+      const res = await api.delete(`/lost-found/${itemId}`);
+      if (res.data && res.data.success) {
+        showToast('Report deleted successfully.');
+        fetchLostFoundItems();
+        if (selectedLostFoundItem && selectedLostFoundItem._id === itemId) {
+          setLostFoundModalOpen(false);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete report.', 'error');
+    }
+  };
+
   const fetchNotifications = async () => {
     try {
       setLoadingNotifications(true);
@@ -437,6 +511,9 @@ export default function AdminDashboard() {
     }
     if (activeTab === 'community') {
       fetchPosts();
+    }
+    if (activeTab === 'lost_found') {
+      fetchLostFoundItems();
     }
   }, [activeTab]);
 
@@ -1325,7 +1402,10 @@ export default function AdminDashboard() {
             <Activity size={18} />
             <span>Community Hub</span>
           </button>
-          <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
+          <button
+            className={`sidebar-item ${activeTab === 'lost_found' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/lost-found'; setActiveTab('lost_found'); }}
+          >
             <Tag size={18} />
             <span>Lost & Found</span>
           </button>
@@ -1783,7 +1863,7 @@ export default function AdminDashboard() {
                               <span>💬 {post.commentsCount || post.comments?.length || 0} Comments</span>
                             </div>
                           </div>
-                          
+
                           <div style={{ display: 'flex', gap: '8px', marginTop: '16px', borderTop: '1px solid #edf2f7', paddingTop: '12px' }}>
                             <button
                               className="admin-btn secondary"
@@ -1825,6 +1905,220 @@ export default function AdminDashboard() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+
+        {/* ==========================================
+            VIEW E: LOST & FOUND MANAGEMENT PAGE
+            ========================================== */}
+        {activeTab === 'lost_found' && (() => {
+          const filteredItems = lostFoundItems.filter(item => {
+            const matchesSearch = !lostFoundSearchQuery ||
+              item.itemName?.toLowerCase().includes(lostFoundSearchQuery.toLowerCase()) ||
+              item.description?.toLowerCase().includes(lostFoundSearchQuery.toLowerCase()) ||
+              item.location?.toLowerCase().includes(lostFoundSearchQuery.toLowerCase());
+            const matchesType = lostFoundTypeFilter === 'All' || item.type === lostFoundTypeFilter;
+            const matchesStatus = lostFoundStatusFilter === 'All' || item.status === lostFoundStatusFilter;
+            return matchesSearch && matchesType && matchesStatus;
+          });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="admin-flex-row" style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-dark)' }}>Lost & Found Reports</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>Manage community reports of lost and found items.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button className="admin-btn secondary" style={{ gap: '6px', height: '40px' }} onClick={fetchLostFoundItems}>
+                    <RefreshCw size={14} className={loadingLostFound ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Unified Filter Toolbar */}
+              <div className="unified-filter-toolbar">
+                <div className="search-input-wrapper" style={{ flex: 2, minWidth: '240px' }}>
+                  <Search size={16} className="search-icon" style={{ top: '12px' }} />
+                  <input
+                    type="text"
+                    placeholder="Search by item name or location..."
+                    value={lostFoundSearchQuery}
+                    onChange={(e) => setLostFoundSearchQuery(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <select
+                    value={lostFoundTypeFilter}
+                    onChange={(e) => setLostFoundTypeFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Types</option>
+                    <option value="Lost">Lost</option>
+                    <option value="Found">Found</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <select
+                    value={lostFoundStatusFilter}
+                    onChange={(e) => setLostFoundStatusFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Resolved">Resolved</option>
+                  </select>
+                </div>
+
+                <button
+                  className="admin-btn secondary"
+                  onClick={() => {
+                    setLostFoundSearchQuery('');
+                    setLostFoundTypeFilter('All');
+                    setLostFoundStatusFilter('All');
+                  }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {/* Loading / Error / Content State */}
+              {loadingLostFound ? (
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <RefreshCw size={28} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                  <p style={{ color: 'var(--text-muted)' }}>Retrieving Lost & Found records...</p>
+                </div>
+              ) : lostFoundError ? (
+                <div className="chart-card" style={{ padding: '40px', textAlign: 'center', borderColor: '#fecaca' }}>
+                  <AlertCircle size={40} style={{ color: '#ef4444', marginBottom: '12px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>Database Synchronization Error</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '8px 0 16px' }}>{lostFoundError}</p>
+                  <button className="admin-btn primary" onClick={fetchLostFoundItems}>Retry Fetching</button>
+                </div>
+              ) : filteredItems.length === 0 ? (
+                <div className="chart-card" style={{ padding: '60px 40px', textAlign: 'center' }}>
+                  <FolderOpen size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>No Reports Found</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '6px', marginBottom: '16px' }}>
+                    {lostFoundItems.length === 0 ? 'No lost or found items have been reported.' : 'No items match the active search filters.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid #edf2f7', borderRadius: '12px' }}>
+                  <table className="admin-table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ paddingLeft: '24px', textAlign: 'left' }}>Item</th>
+                        <th style={{ textAlign: 'left' }}>Type</th>
+                        <th style={{ textAlign: 'left' }}>Posted By</th>
+                        <th style={{ textAlign: 'left' }}>Location</th>
+                        <th style={{ textAlign: 'left' }}>Status</th>
+                        <th style={{ textAlign: 'right', paddingRight: '24px' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredItems.map(item => {
+                        const isLost = item.type === 'Lost';
+                        const itemImage = item.image ? (item.image.startsWith('http') ? item.image : `http://localhost:5000${item.image}`) : null;
+                        return (
+                          <tr key={item._id}>
+                            <td style={{ paddingLeft: '24px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                {itemImage ? (
+                                  <img src={itemImage} alt={item.itemName} style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                                    <FolderOpen size={16} />
+                                  </div>
+                                )}
+                                <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{item.itemName}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                background: isLost ? '#fee2e2' : '#d1fae5',
+                                color: isLost ? '#ef4444' : '#10b981'
+                              }}>{item.type}</span>
+                            </td>
+                            <td>{item.user?.fullName || 'Citizen'}</td>
+                            <td>{item.location}</td>
+                            <td>
+                              {(() => {
+                                const norm = item.status === 'Active' ? 'LOST' : item.status === 'Resolved' ? 'RETURNED' : (item.status || 'LOST').toUpperCase();
+                                let bg = '#fee2e2', fg = '#ef4444'; // LOST
+                                if (norm === 'FOUND') { bg = '#d1fae5'; fg = '#10b981'; }
+                                else if (norm === 'RETURNED') { bg = '#dbeafe'; fg = '#2563eb'; }
+                                return (
+                                  <span style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800,
+                                    background: bg,
+                                    color: fg
+                                  }}>{norm}</span>
+                                );
+                              })()}
+                            </td>
+                            <td style={{ textAlign: 'right', paddingRight: '24px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                <button
+                                  className="admin-btn secondary"
+                                  style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
+                                  onClick={() => {
+                                    setSelectedLostFoundItem(item);
+                                    setLostFoundModalOpen(true);
+                                  }}
+                                >
+                                  Details
+                                </button>
+                                {item.status === 'Active' ? (
+                                  <button
+                                    className="admin-btn primary"
+                                    style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', background: '#ecfdf5', color: '#10b981' }}
+                                    onClick={() => handleResolveLostFound(item._id, 'Resolved')}
+                                  >
+                                    Resolve
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="admin-btn secondary"
+                                    style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', background: '#fffbeb', color: '#b45309' }}
+                                    onClick={() => handleResolveLostFound(item._id, 'Active')}
+                                  >
+                                    Reopen
+                                  </button>
+                                )}
+                                <button
+                                  className="admin-btn danger"
+                                  style={{ padding: '0 8px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', background: '#fee2e2', color: '#ef4444' }}
+                                  onClick={() => handleDeleteLostFoundItem(item._id)}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -3298,6 +3592,247 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Lost & Found Item Details Modal */}
+        {lostFoundModalOpen && selectedLostFoundItem && (
+          <div 
+            className="admin-modal-overlay" 
+            onClick={() => setLostFoundModalOpen(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(15, 23, 42, 0.4)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000
+            }}
+          >
+            <div 
+              className="admin-modal-container" 
+              onClick={(e) => e.stopPropagation()} 
+              style={{ 
+                padding: '24px', 
+                width: '90%',
+                maxWidth: '700px', 
+                maxHeight: '80vh',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#fff',
+                borderRadius: '20px',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-dark)' }}>Lost & Found Details</h3>
+                <button
+                  onClick={() => setLostFoundModalOpen(false)}
+                  style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer', lineHieght: 1 }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Scrollable Content Body */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingRight: '4px', flex: 1 }}>
+                
+                {/* Image Area */}
+                <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', background: '#f8fafc', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
+                  {selectedLostFoundItem?.image ? (
+                    <img
+                      src={selectedLostFoundItem.image.startsWith('http') ? selectedLostFoundItem.image : `http://localhost:5000${selectedLostFoundItem.image}`}
+                      alt={selectedLostFoundItem.itemName || 'Item'}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
+                      <FolderOpen size={48} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>No image available</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Item Information */}
+                <div className="user-details-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
+                  <h4 className="user-details-title">Item Information</h4>
+                  <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Item Name</span>
+                      <span className="user-detail-value" style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-dark)' }}>{selectedLostFoundItem?.itemName || 'Unnamed Item'}</span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Type</span>
+                      <span className="user-detail-value" style={{
+                        fontWeight: 800,
+                        fontSize: '0.9rem',
+                        color: selectedLostFoundItem?.type === 'Lost' ? '#ef4444' : '#10b981'
+                      }}>{(selectedLostFoundItem?.type || 'Lost').toUpperCase()}</span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Category</span>
+                      <span className="user-detail-value">{selectedLostFoundItem?.category || 'N/A'}</span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Current Status</span>
+                      <span className="user-detail-value">
+                        {(() => {
+                          const norm = selectedLostFoundItem?.status === 'Active' ? 'LOST' : selectedLostFoundItem?.status === 'Resolved' ? 'RETURNED' : (selectedLostFoundItem?.status || 'LOST').toUpperCase();
+                          let bg = '#fee2e2', fg = '#ef4444'; // LOST
+                          if (norm === 'FOUND') { bg = '#d1fae5'; fg = '#10b981'; }
+                          else if (norm === 'RETURNED') { bg = '#dbeafe'; fg = '#2563eb'; }
+                          return (
+                            <span style={{
+                              padding: '4px 12px',
+                              borderRadius: '9999px',
+                              fontSize: '0.75rem',
+                              fontWeight: 800,
+                              background: bg,
+                              color: fg
+                            }}>
+                              {norm}
+                            </span>
+                          );
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '16px' }}>
+                    <span className="user-detail-label">Description</span>
+                    <p style={{ fontSize: '0.88rem', color: '#334155', margin: '4px 0 0 0', lineHeight: 1.6, background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #edf2f7' }}>
+                      {selectedLostFoundItem?.description || 'Not provided'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Location & Date */}
+                <div className="user-details-section" style={{ borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                  <h4 className="user-details-title">Location & Date</h4>
+                  <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Location</span>
+                      <span className="user-detail-value">{selectedLostFoundItem?.location || 'N/A'}</span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Date Lost / Found</span>
+                      <span className="user-detail-value">
+                        {selectedLostFoundItem?.date ? new Date(selectedLostFoundItem.date).toLocaleDateString() : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Posted By */}
+                <div className="user-details-section" style={{ borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                  <h4 className="user-details-title">Posted By</h4>
+                  <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Name</span>
+                      <span className="user-detail-value">{selectedLostFoundItem?.user?.fullName || 'Citizen'}</span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Email</span>
+                      <span className="user-detail-value">{selectedLostFoundItem?.user?.email || 'Not provided'}</span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Phone</span>
+                      <span className="user-detail-value" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Phone size={12} style={{ color: '#94a3b8' }} />
+                        {selectedLostFoundItem?.user?.mobile || 'Not provided'}
+                      </span>
+                    </div>
+                    <div className="user-detail-item">
+                      <span className="user-detail-label">Contact Details Provided</span>
+                      <span className="user-detail-value">{selectedLostFoundItem?.contactInformation || 'Not provided'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recovery / Finder Info */}
+                {selectedLostFoundItem?.foundBy && (
+                  <div className="user-details-section" style={{ borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                    <h4 className="user-details-title">Recovery Information</h4>
+                    <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Found By (Finder)</span>
+                        <span className="user-detail-value">{selectedLostFoundItem.foundBy.fullName || 'Citizen'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Finder Email</span>
+                        <span className="user-detail-value">{selectedLostFoundItem.foundBy.email || 'Not provided'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Finder Mobile</span>
+                        <span className="user-detail-value">{selectedLostFoundItem.foundBy.mobile || 'Not provided'}</span>
+                      </div>
+                      <div className="user-detail-item">
+                        <span className="user-detail-label">Found At Timestamp</span>
+                        <span className="user-detail-value">
+                          {selectedLostFoundItem.foundAt ? new Date(selectedLostFoundItem.foundAt).toLocaleString() : 'N/A'}
+                        </span>
+                      </div>
+                      {selectedLostFoundItem.returnedAt && (
+                        <div className="user-detail-item" style={{ gridColumn: 'span 2' }}>
+                          <span className="user-detail-label">Owner Confirmed Returned At</span>
+                          <span className="user-detail-value" style={{ color: '#2563eb', fontWeight: 700 }}>
+                            {new Date(selectedLostFoundItem.returnedAt).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
+              {/* Modal Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px', marginTop: '20px' }}>
+                <button className="admin-btn secondary" onClick={() => setLostFoundModalOpen(false)}>Close</button>
+                {(selectedLostFoundItem?.status || 'Active') === 'Active' ? (
+                  <button
+                    className="admin-btn primary"
+                    style={{ background: '#10b981', color: '#fff' }}
+                    onClick={() => {
+                      handleResolveLostFound(selectedLostFoundItem._id, 'Resolved');
+                      setLostFoundModalOpen(false);
+                    }}
+                  >
+                    Mark as Resolved
+                  </button>
+                ) : (
+                  <button
+                    className="admin-btn secondary"
+                    style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }}
+                    onClick={() => {
+                      handleResolveLostFound(selectedLostFoundItem._id, 'Active');
+                      setLostFoundModalOpen(false);
+                    }}
+                  >
+                    Reopen
+                  </button>
+                )}
+                <button
+                  className="admin-btn danger"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => {
+                    handleDeleteLostFoundItem(selectedLostFoundItem._id);
+                  }}
+                >
+                  <Trash2 size={14} /> Delete Report
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
 
 
       </main>

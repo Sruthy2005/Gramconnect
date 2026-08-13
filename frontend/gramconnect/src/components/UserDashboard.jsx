@@ -8,6 +8,7 @@ import ProfilePage from './ProfilePage';
 import ReportIssuePage from './ReportIssuePage';
 import MyComplaintsPage from './MyComplaintsPage';
 import UserCommunityHub from './CommunityHub/UserCommunityHub';
+import UserLostFound from './UserLostFound';
 import './UserDashboard.css';
 
 export default function UserDashboard() {
@@ -836,6 +837,8 @@ export default function UserDashboard() {
           renderNotificationsPage(false)
         ) : activeTab === 'hub' ? (
           <UserCommunityHub />
+        ) : activeTab === 'lost_found' ? (
+          <UserLostFound />
         ) : (
           <>
             {/* Section 1: Welcome Header Card & Profile Summary Card (Requirement 4) */}
