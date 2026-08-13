@@ -9,6 +9,7 @@ import ReportIssuePage from './ReportIssuePage';
 import MyComplaintsPage from './MyComplaintsPage';
 import UserCommunityHub from './CommunityHub/UserCommunityHub';
 import UserLostFound from './UserLostFound';
+import UserAnnouncements from './UserAnnouncements';
 import './UserDashboard.css';
 
 export default function UserDashboard() {
@@ -24,6 +25,7 @@ export default function UserDashboard() {
   // Dynamic statistics state
   const [stats, setStats] = useState({ total: 0, pending: 0, inProgress: 0, resolved: 0 });
   const [recentComplaints, setRecentComplaints] = useState([]);
+  const [dashboardAnnouncements, setDashboardAnnouncements] = useState([]);
 
   // Notifications state
   const [notifications, setNotifications] = useState([]);
@@ -91,8 +93,14 @@ export default function UserDashboard() {
         setUnreadNotificationsCount(countRes.data.count || 0);
       }
       setLoadingNotifications(false);
+
+      // Fetch latest announcements for the home section
+      const annRes = await api.get('/announcements');
+      if (annRes.data && annRes.data.success) {
+        setDashboardAnnouncements(annRes.data.announcements.slice(0, 3) || []);
+      }
     } catch (err) {
-      console.warn('[DEV] Failed to load dashboard statistics or notifications:', err);
+      console.warn('[DEV] Failed to load dashboard statistics, notifications, or announcements:', err);
       setLoadingNotifications(false);
     }
   };
@@ -839,6 +847,8 @@ export default function UserDashboard() {
           <UserCommunityHub />
         ) : activeTab === 'lost_found' ? (
           <UserLostFound />
+        ) : activeTab === 'announcements' ? (
+          <UserAnnouncements />
         ) : (
           <>
             {/* Section 1: Welcome Header Card & Profile Summary Card (Requirement 4) */}
@@ -1045,26 +1055,27 @@ export default function UserDashboard() {
                 <h2 className="section-title">{t('dashboard.announcements_sec.title')}</h2>
                 <div className="announcements-card">
                   <div className="announcements-list">
-                    <div className="announcement-item">
-                      <span className="announcement-title">
-                        {t('dashboard.announcements_sec.a1_title')}
-                      </span>
-                      <span className="announcement-date">July 24, 2026</span>
-                    </div>
-
-                    <div className="announcement-item">
-                      <span className="announcement-title">
-                        {t('dashboard.announcements_sec.a2_title')}
-                      </span>
-                      <span className="announcement-date">July 20, 2026</span>
-                    </div>
-
-                    <div className="announcement-item">
-                      <span className="announcement-title">
-                        {t('dashboard.announcements_sec.a3_title')}
-                      </span>
-                      <span className="announcement-date">July 18, 2026</span>
-                    </div>
+                    {dashboardAnnouncements.length === 0 ? (
+                      <div className="announcement-item" style={{ border: 'none', justifyContent: 'center' }}>
+                        <span className="announcement-title" style={{ color: 'var(--text-muted)' }}>
+                          No announcements available.
+                        </span>
+                      </div>
+                    ) : (
+                      dashboardAnnouncements.map((ann) => (
+                        <div
+                          key={ann._id}
+                          className="announcement-item"
+                          onClick={() => { window.location.hash = '#dashboard/announcements'; }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <span className="announcement-title">{ann.title}</span>
+                          <span className="announcement-date">
+                            {new Date(ann.publishDate || ann.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>

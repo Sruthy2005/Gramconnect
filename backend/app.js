@@ -11,6 +11,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const communityRoutes = require('./routes/communityRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const lostFoundRoutes = require('./routes/lostFoundRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/lost-found', lostFoundRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {

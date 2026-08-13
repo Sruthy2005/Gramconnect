@@ -47,6 +47,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { GramConnectIcon } from './GramConnectLogo';
 import api from '../utils/api';
+import { KERALA_DISTRICTS, getPanchayatsForDistrict } from '../utils/locationData';
 import './UserDashboard.css';
 import './AdminDashboard.css';
 
@@ -143,6 +144,34 @@ export default function AdminDashboard() {
   const [selectedLostFoundItem, setSelectedLostFoundItem] = useState(null);
   const [lostFoundModalOpen, setLostFoundModalOpen] = useState(false);
 
+  // Announcement states
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announcementsError, setAnnouncementsError] = useState(null);
+  const [annSearchQuery, setAnnSearchQuery] = useState('');
+  const [annCategoryFilter, setAnnCategoryFilter] = useState('All');
+  const [annPriorityFilter, setAnnPriorityFilter] = useState('All');
+  const [annDistrictFilter, setAnnDistrictFilter] = useState('All');
+  const [annPanchayatFilter, setAnnPanchayatFilter] = useState('All');
+  const [annStatusFilter, setAnnStatusFilter] = useState('All');
+
+  const [annModalOpen, setAnnModalOpen] = useState(false);
+  const [annEditingItem, setAnnEditingItem] = useState(null);
+  const [annDetailsOpen, setAnnDetailsOpen] = useState(false);
+  const [selectedAnnItem, setSelectedAnnItem] = useState(null);
+  const [submittingAnn, setSubmittingAnn] = useState(false);
+
+  // Form Fields
+  const [annFormTitle, setAnnFormTitle] = useState('');
+  const [annFormDescription, setAnnFormDescription] = useState('');
+  const [annFormCategory, setAnnFormCategory] = useState('General');
+  const [annFormPriority, setAnnFormPriority] = useState('Normal');
+  const [annFormDistrict, setAnnFormDistrict] = useState('All Districts');
+  const [annFormPanchayat, setAnnFormPanchayat] = useState('All Panchayats');
+  const [annFormPublishDate, setAnnFormPublishDate] = useState('');
+  const [annFormExpiryDate, setAnnFormExpiryDate] = useState('');
+  const [annFormAttachment, setAnnFormAttachment] = useState(null);
+
 
   // Filter States (Complaint Management)
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,6 +227,9 @@ export default function AdminDashboard() {
     } else if (hash === '#admin/lost-found') {
       setViewingComplaintId(null);
       setActiveTab('lost_found');
+    } else if (hash === '#admin/announcements') {
+      setViewingComplaintId(null);
+      setActiveTab('announcements');
     } else {
       setViewingComplaintId(null);
       setActiveTab('dashboard');
@@ -211,6 +243,8 @@ export default function AdminDashboard() {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setLostFoundModalOpen(false);
+        setAnnModalOpen(false);
+        setAnnDetailsOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -450,7 +484,110 @@ export default function AdminDashboard() {
       showToast(err.response?.data?.message || 'Failed to delete report.', 'error');
     }
   };
+  const fetchAnnouncements = async () => {
+    setAnnouncementsLoading(true);
+    setAnnouncementsError(null);
+    try {
+      const res = await api.get('/announcements');
+      if (res.data && res.data.success) {
+        setAnnouncements(res.data.announcements || []);
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to fetch announcements:', err);
+      setAnnouncementsError(err.message || 'Failed to retrieve announcements.');
+      showToast('Error fetching announcements.', 'error');
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  };
 
+  const handleOpenAnnModal = (item = null) => {
+    setAnnEditingItem(item);
+    if (item) {
+      setAnnFormTitle(item.title || '');
+      setAnnFormDescription(item.description || '');
+      setAnnFormCategory(item.category || 'General');
+      setAnnFormPriority(item.priority || 'Normal');
+      setAnnFormDistrict(item.district || 'All Districts');
+      setAnnFormPanchayat(item.panchayat || 'All Panchayats');
+      setAnnFormPublishDate(item.publishDate ? item.publishDate.substring(0, 10) : '');
+      setAnnFormExpiryDate(item.expiryDate ? item.expiryDate.substring(0, 10) : '');
+      setAnnFormAttachment(null);
+    } else {
+      setAnnFormTitle('');
+      setAnnFormDescription('');
+      setAnnFormCategory('General');
+      setAnnFormPriority('Normal');
+      setAnnFormDistrict('All Districts');
+      setAnnFormPanchayat('All Panchayats');
+      setAnnFormPublishDate(new Date().toISOString().substring(0, 10));
+      setAnnFormExpiryDate('');
+      setAnnFormAttachment(null);
+    }
+    setAnnModalOpen(true);
+  };
+
+  const handleSaveAnnouncement = async (e) => {
+    e.preventDefault();
+    if (!annFormTitle || !annFormDescription || !annFormCategory) {
+      showToast('Please fill in all required fields.', 'error');
+      return;
+    }
+
+    setSubmittingAnn(true);
+    const formData = new FormData();
+    formData.append('title', annFormTitle);
+    formData.append('description', annFormDescription);
+    formData.append('category', annFormCategory);
+    formData.append('priority', annFormPriority);
+    formData.append('district', annFormDistrict);
+    formData.append('panchayat', annFormPanchayat);
+    if (annFormPublishDate) formData.append('publishDate', annFormPublishDate);
+    if (annFormExpiryDate) formData.append('expiryDate', annFormExpiryDate);
+    if (annFormAttachment) {
+      formData.append('attachment', annFormAttachment);
+    }
+
+    try {
+      let res;
+      if (annEditingItem) {
+        res = await api.put(`/announcements/${annEditingItem._id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        res = await api.post('/announcements', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+
+      if (res.data && res.data.success) {
+        showToast(annEditingItem ? 'Announcement updated successfully.' : 'Announcement published successfully.');
+        setAnnModalOpen(false);
+        fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to save announcement:', err);
+      showToast(err.response?.data?.message || 'Failed to save announcement.', 'error');
+    } finally {
+      setSubmittingAnn(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (itemId) => {
+    if (!window.confirm('Are you sure you want to remove this announcement?')) return;
+    try {
+      const res = await api.delete(`/announcements/${itemId}`);
+      if (res.data && res.data.success) {
+        showToast('Announcement removed (archived) successfully.');
+        fetchAnnouncements();
+        if (selectedAnnItem && selectedAnnItem._id === itemId) {
+          setAnnDetailsOpen(false);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to remove announcement.', 'error');
+    }
+  };
   const fetchNotifications = async () => {
     try {
       setLoadingNotifications(true);
@@ -514,6 +651,9 @@ export default function AdminDashboard() {
     }
     if (activeTab === 'lost_found') {
       fetchLostFoundItems();
+    }
+    if (activeTab === 'announcements') {
+      fetchAnnouncements();
     }
   }, [activeTab]);
 
@@ -1409,7 +1549,10 @@ export default function AdminDashboard() {
             <Tag size={18} />
             <span>Lost & Found</span>
           </button>
-          <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
+          <button
+            className={`sidebar-item ${activeTab === 'announcements' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/announcements'; setActiveTab('announcements'); }}
+          >
             <Megaphone size={18} />
             <span>Announcements</span>
           </button>
@@ -2124,6 +2267,498 @@ export default function AdminDashboard() {
             </div>
           );
         })()}
+
+
+        {/* ==========================================
+            VIEW F: ANNOUNCEMENT MANAGEMENT PAGE
+            ========================================== */}
+        {activeTab === 'announcements' && (() => {
+          const filteredAnnouncements = announcements.filter(ann => {
+            const matchesSearch = !annSearchQuery ||
+              ann.title?.toLowerCase().includes(annSearchQuery.toLowerCase()) ||
+              ann.description?.toLowerCase().includes(annSearchQuery.toLowerCase());
+            const matchesCategory = annCategoryFilter === 'All' || ann.category === annCategoryFilter;
+            const matchesPriority = annPriorityFilter === 'All' || ann.priority === annPriorityFilter;
+            const matchesDistrict = annDistrictFilter === 'All' || ann.district === annDistrictFilter;
+            const matchesPanchayat = annPanchayatFilter === 'All' || ann.panchayat === annPanchayatFilter;
+            const matchesStatus = annStatusFilter === 'All' || ann.status === annStatusFilter;
+            return matchesSearch && matchesCategory && matchesPriority && matchesDistrict && matchesPanchayat && matchesStatus;
+          });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="admin-flex-row" style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-dark)' }}>Announcements</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+                    Create and manage important announcements for citizens.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button 
+                    className="admin-btn primary" 
+                    style={{ gap: '6px', height: '40px', background: 'var(--primary)', color: '#fff', borderRadius: '8px', padding: '0 16px', display: 'flex', alignItems: 'center', fontSize: '0.85rem', fontWeight: 700 }}
+                    onClick={() => handleOpenAnnModal(null)}
+                  >
+                    <Plus size={16} /> Create Announcement
+                  </button>
+                  <button className="admin-btn secondary" style={{ gap: '6px', height: '40px' }} onClick={fetchAnnouncements}>
+                    <RefreshCw size={14} className={announcementsLoading ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Announcements Filters Toolbar */}
+              <div className="unified-filter-toolbar">
+                <div className="search-input-wrapper" style={{ flex: 2, minWidth: '240px' }}>
+                  <Search size={16} className="search-icon" style={{ top: '12px' }} />
+                  <input
+                    type="text"
+                    placeholder="Search announcements by title..."
+                    value={annSearchQuery}
+                    onChange={(e) => setAnnSearchQuery(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div style={{ flex: 1, minWidth: '130px' }}>
+                  <select
+                    value={annCategoryFilter}
+                    onChange={(e) => setAnnCategoryFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Categories</option>
+                    <option value="General">General</option>
+                    <option value="Public Notice">Public Notice</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Road & Transport">Road & Transport</option>
+                    <option value="Water">Water</option>
+                    <option value="Electricity">Electricity</option>
+                    <option value="Health">Health</option>
+                    <option value="Community">Community</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '130px' }}>
+                  <select
+                    value={annPriorityFilter}
+                    onChange={(e) => setAnnPriorityFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Priorities</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Important">Important</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '130px' }}>
+                  <select
+                    value={annDistrictFilter}
+                    onChange={(e) => setAnnDistrictFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Districts</option>
+                    <option value="Thiruvananthapuram">Thiruvananthapuram</option>
+                    <option value="Kollam">Kollam</option>
+                    <option value="Pathanamthitta">Pathanamthitta</option>
+                    <option value="Alappuzha">Alappuzha</option>
+                    <option value="Kottayam">Kottayam</option>
+                    <option value="Idukki">Idukki</option>
+                    <option value="Ernakulam">Ernakulam</option>
+                    <option value="Thrissur">Thrissur</option>
+                    <option value="Palakkad">Palakkad</option>
+                    <option value="Malappuram">Malappuram</option>
+                    <option value="Kozhikode">Kozhikode</option>
+                    <option value="Wayanad">Wayanad</option>
+                    <option value="Kannur">Kannur</option>
+                    <option value="Kasaragod">Kasaragod</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '130px' }}>
+                  <select
+                    value={annStatusFilter}
+                    onChange={(e) => setAnnStatusFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Archived">Archived</option>
+                  </select>
+                </div>
+
+                <button
+                  className="admin-btn secondary"
+                  onClick={() => {
+                    setAnnSearchQuery('');
+                    setAnnCategoryFilter('All');
+                    setAnnPriorityFilter('All');
+                    setAnnDistrictFilter('All');
+                    setAnnPanchayatFilter('All');
+                    setAnnStatusFilter('All');
+                  }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {/* Content lists */}
+              {announcementsLoading ? (
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <RefreshCw size={28} className="animate-spin" style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+                  <p style={{ color: 'var(--text-muted)' }}>Retrieving announcements from database...</p>
+                </div>
+              ) : announcementsError ? (
+                <div className="chart-card" style={{ padding: '40px', textAlign: 'center', borderColor: '#fecaca' }}>
+                  <AlertCircle size={40} style={{ color: '#ef4444', marginBottom: '12px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>Database Sync Failure</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '8px 0 16px' }}>{announcementsError}</p>
+                  <button className="admin-btn primary" onClick={fetchAnnouncements}>Retry Fetching</button>
+                </div>
+              ) : filteredAnnouncements.length === 0 ? (
+                <div className="chart-card" style={{ padding: '60px 40px', textAlign: 'center' }}>
+                  <Megaphone size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                  <h3 style={{ margin: 0, color: 'var(--text-dark)' }}>No Announcements Available</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '6px', marginBottom: '16px' }}>
+                    Create your first announcement for citizens.
+                  </p>
+                  <button className="admin-btn primary" onClick={() => handleOpenAnnModal(null)}>Create Announcement</button>
+                </div>
+              ) : (
+                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid #edf2f7', borderRadius: '12px' }}>
+                  <table className="admin-table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ paddingLeft: '24px', textAlign: 'left' }}>Title</th>
+                        <th style={{ textAlign: 'left' }}>Category</th>
+                        <th style={{ textAlign: 'left' }}>Priority</th>
+                        <th style={{ textAlign: 'left' }}>District</th>
+                        <th style={{ textAlign: 'left' }}>Panchayat</th>
+                        <th style={{ textAlign: 'left' }}>Published Date</th>
+                        <th style={{ textAlign: 'left' }}>Status</th>
+                        <th style={{ textAlign: 'right', paddingRight: '24px' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAnnouncements.map(ann => {
+                        let prioBg = '#f1f5f9', prioFg = '#475569';
+                        if (ann.priority === 'Urgent') { prioBg = '#fee2e2'; prioFg = '#ef4444'; }
+                        else if (ann.priority === 'Important') { prioBg = '#fffbeb'; prioFg = '#b45309'; }
+
+                        const hasImage = ann.attachment;
+
+                        return (
+                          <tr key={ann._id}>
+                            <td style={{ paddingLeft: '24px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Megaphone size={14} style={{ color: 'var(--primary)' }} />
+                                <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{ann.title}</span>
+                              </div>
+                            </td>
+                            <td>{ann.category}</td>
+                            <td>
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: prioBg,
+                                color: prioFg,
+                                border: `1px solid ${prioFg}20`
+                              }}>{ann.priority}</span>
+                            </td>
+                            <td>{ann.district || 'All'}</td>
+                            <td>{ann.panchayat || 'All'}</td>
+                            <td>{new Date(ann.publishDate || ann.createdAt).toLocaleDateString()}</td>
+                            <td>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '9999px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                background: ann.status === 'Active' ? '#e8f5e9' : '#eceff1',
+                                color: ann.status === 'Active' ? '#2e7d32' : '#455a64'
+                              }}>{ann.status}</span>
+                            </td>
+                            <td style={{ textAlign: 'right', paddingRight: '24px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                <button
+                                  className="admin-btn secondary"
+                                  style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center' }}
+                                  onClick={() => {
+                                    setSelectedAnnItem(ann);
+                                    setAnnDetailsOpen(true);
+                                  }}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  className="admin-btn secondary"
+                                  style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center' }}
+                                  onClick={() => handleOpenAnnModal(ann)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="admin-btn danger"
+                                  style={{ padding: '0 8px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', background: '#fee2e2', color: '#ef4444' }}
+                                  onClick={() => handleDeleteAnnouncement(ann._id)}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* CREATE & EDIT FORM MODAL */}
+              {annModalOpen && (
+                <div className="admin-modal-overlay" onClick={() => setAnnModalOpen(false)}>
+                  <div className="admin-modal-container" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '600px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', marginBottom: '20px' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-dark)' }}>
+                        {annEditingItem ? 'Edit Announcement' : 'Publish New Announcement'}
+                      </h3>
+                      <button
+                        onClick={() => setAnnModalOpen(false)}
+                        style={{ background: 'transparent', border: 'none', fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Announcement Title *</label>
+                        <input 
+                          type="text" 
+                          value={annFormTitle} 
+                          onChange={(e) => setAnnFormTitle(e.target.value)} 
+                          required 
+                          style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} 
+                          placeholder="e.g. Scheduled Road Maintenance notice" 
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Description / Content *</label>
+                        <textarea 
+                          value={annFormDescription} 
+                          onChange={(e) => setAnnFormDescription(e.target.value)} 
+                          required 
+                          rows={4} 
+                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.5 }} 
+                          placeholder="Provide details about dates, alternate routes, affected services..." 
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Category *</label>
+                          <select 
+                            value={annFormCategory} 
+                            onChange={(e) => setAnnFormCategory(e.target.value)} 
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                          >
+                            <option value="General">General</option>
+                            <option value="Public Notice">Public Notice</option>
+                            <option value="Emergency">Emergency</option>
+                            <option value="Road & Transport">Road & Transport</option>
+                            <option value="Water">Water</option>
+                            <option value="Electricity">Electricity</option>
+                            <option value="Health">Health</option>
+                            <option value="Community">Community</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Priority Level</label>
+                          <select 
+                            value={annFormPriority} 
+                            onChange={(e) => setAnnFormPriority(e.target.value)} 
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                          >
+                            <option value="Normal">Normal</option>
+                            <option value="Important">Important</option>
+                            <option value="Urgent">Urgent</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>District Target *</label>
+                          <select
+                            value={annFormDistrict}
+                            onChange={(e) => {
+                              setAnnFormDistrict(e.target.value);
+                              setAnnFormPanchayat('All Panchayats');
+                            }}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                          >
+                            <option value="All Districts">All Districts</option>
+                            {KERALA_DISTRICTS.map(d => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Panchayat Scope *</label>
+                          <select
+                            value={annFormPanchayat}
+                            onChange={(e) => setAnnFormPanchayat(e.target.value)}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                          >
+                            <option value="All Panchayats">All Panchayats</option>
+                            {getPanchayatsForDistrict(annFormDistrict).map(p => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Expiry Date (Optional)</label>
+                          <input 
+                            type="date" 
+                            value={annFormExpiryDate} 
+                            onChange={(e) => setAnnFormExpiryDate(e.target.value)} 
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} 
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Attachment Image (Optional)</label>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setAnnFormAttachment(e.target.files[0]);
+                            }
+                          }} 
+                          style={{ fontSize: '0.85rem' }} 
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px', marginTop: '10px' }}>
+                        <button type="button" className="admin-btn secondary" onClick={() => setAnnModalOpen(false)}>Cancel</button>
+                        <button type="submit" className="admin-btn primary" disabled={submittingAnn}>
+                          {submittingAnn ? 'Saving Notice...' : (annEditingItem ? 'Save Changes' : 'Publish Announcement')}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW DETAILS OVERLAY MODAL */}
+              {annDetailsOpen && selectedAnnItem && (() => {
+                const priorityStyle = annFormPriority === 'Urgent' ? { background: '#fee2e2', color: '#ef4444' } : annFormPriority === 'Important' ? { background: '#fffbeb', color: '#b45309' } : { background: '#f1f5f9', color: '#475569' };
+                const attachmentImage = selectedAnnItem.attachment ? (selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `http://localhost:5000${selectedAnnItem.attachment}`) : null;
+                return (
+                  <div className="admin-modal-overlay" onClick={() => setAnnDetailsOpen(false)}>
+                    <div className="admin-modal-container" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '650px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', marginBottom: '20px' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-dark)' }}>Announcement Details</h3>
+                        <button
+                          onClick={() => setAnnDetailsOpen(false)}
+                          style={{ background: 'transparent', border: 'none', fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer' }}
+                        >
+                          &times;
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
+                        {attachmentImage && (
+                          <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', textAlign: 'center' }}>
+                            <img src={attachmentImage} alt={selectedAnnItem.title} style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', background: '#f8fafc' }} />
+                          </div>
+                        )}
+
+                        <div className="user-details-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
+                          <h4 className="user-details-title">Notice Content</h4>
+                          <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Title</span>
+                              <span className="user-detail-value" style={{ fontWeight: 800 }}>{selectedAnnItem.title}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Category</span>
+                              <span className="user-detail-value">{selectedAnnItem.category}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Priority Level</span>
+                              <span className="user-detail-value">{selectedAnnItem.priority}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">District Target</span>
+                              <span className="user-detail-value">{selectedAnnItem.district || 'All'}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Panchayat Target</span>
+                              <span className="user-detail-value">{selectedAnnItem.panchayat || 'All'}</span>
+                            </div>
+                          </div>
+
+                          <div style={{ marginTop: '16px' }}>
+                            <span className="user-detail-label">Announcement Description</span>
+                            <p style={{ fontSize: '0.88rem', color: '#334155', margin: '4px 0 0 0', lineHeight: 1.6, background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #edf2f7', whiteSpace: 'pre-wrap' }}>
+                              {selectedAnnItem.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="user-details-section" style={{ borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                          <h4 className="user-details-title">Publish Dates & Meta</h4>
+                          <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Publish Date</span>
+                              <span className="user-detail-value">{new Date(selectedAnnItem.publishDate || selectedAnnItem.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Expiry Date</span>
+                              <span className="user-detail-value">{selectedAnnItem.expiryDate ? new Date(selectedAnnItem.expiryDate).toLocaleDateString() : 'No expiry date set'}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Publisher</span>
+                              <span className="user-detail-value">{selectedAnnItem.publishedBy?.fullName || 'Panchayat Admin'}</span>
+                            </div>
+                            <div className="user-detail-item">
+                              <span className="user-detail-label">Current Status</span>
+                              <span className="user-detail-value">{selectedAnnItem.status}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px', marginTop: '20px' }}>
+                        <button className="admin-btn secondary" onClick={() => setAnnDetailsOpen(false)}>Close</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })()}
+
 
 
         {/* ==========================================
