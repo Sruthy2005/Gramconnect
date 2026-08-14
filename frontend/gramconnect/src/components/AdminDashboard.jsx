@@ -42,7 +42,8 @@ import {
   Edit3,
   Save,
   AlertCircle,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GramConnectIcon } from './GramConnectLogo';
@@ -50,6 +51,20 @@ import api from '../utils/api';
 import { KERALA_DISTRICTS, getPanchayatsForDistrict } from '../utils/locationData';
 import './UserDashboard.css';
 import './AdminDashboard.css';
+
+const getLocationsByDistrictAndType = (district, type) => {
+  if (!district || district === 'All Districts' || district === 'All') return [];
+  const allLocations = getPanchayatsForDistrict(district);
+  return allLocations.map(name => {
+    let locType = 'PANCHAYATH';
+    if (name.toLowerCase().includes('municipality')) {
+      locType = 'MUNICIPALITY';
+    } else if (name.toLowerCase().includes('corporation')) {
+      locType = 'CORPORATION';
+    }
+    return { name, type: locType, district };
+  }).filter(location => location.type === type.toUpperCase());
+};
 
 export default function AdminDashboard() {
   const { t } = useTranslation();
@@ -64,6 +79,7 @@ export default function AdminDashboard() {
     if (hash === '#admin/users') return 'users';
     if (hash === '#admin/community') return 'community';
     if (hash === '#admin/lost-found') return 'lost_found';
+    if (hash === '#admin/panchayat-admins') return 'panchayat_admins';
     return 'dashboard';
   });
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
@@ -172,6 +188,33 @@ export default function AdminDashboard() {
   const [annFormExpiryDate, setAnnFormExpiryDate] = useState('');
   const [annFormAttachment, setAnnFormAttachment] = useState(null);
 
+  // Panchayat Admins Management states
+  const [panchayatAdmins, setPanchayatAdmins] = useState([]);
+  const [loadingPAs, setLoadingPAs] = useState(false);
+  const [paStats, setPaStats] = useState({ total: 0, active: 0, inactive: 0 });
+  const [paSearchQuery, setPaSearchQuery] = useState('');
+  const [paDistrictFilter, setPaDistrictFilter] = useState('');
+  const [paPanchayatFilter, setPaPanchayatFilter] = useState('');
+  const [paStatusFilter, setPaStatusFilter] = useState('');
+  const [paModalOpen, setPaModalOpen] = useState(false);
+  const [paEditingItem, setPaEditingItem] = useState(null);
+  const [paViewItem, setPaViewItem] = useState(null);
+  const [paViewModalOpen, setPaViewModalOpen] = useState(false);
+  const [submittingPA, setSubmittingPA] = useState(false);
+  // PA Form fields
+  const [paFormName, setPaFormName] = useState('');
+  const [paFormEmail, setPaFormEmail] = useState('');
+  const [paFormPhone, setPaFormPhone] = useState('');
+  const [paFormDistrict, setPaFormDistrict] = useState('');
+  const [paFormLocalBodyType, setPaFormLocalBodyType] = useState('Panchayath');
+  const [paFormPanchayat, setPaFormPanchayat] = useState('');
+  const [paFormPanchayatCode, setPaFormPanchayatCode] = useState('');
+  const [paFormPassword, setPaFormPassword] = useState('');
+  const [paFormConfirmPassword, setPaFormConfirmPassword] = useState('');
+  const [paFormStatus, setPaFormStatus] = useState('Active');
+  const [paAvailablePanchayats, setPaAvailablePanchayats] = useState([]);
+  const [fetchingPaCode, setFetchingPaCode] = useState(false);
+
 
   // Filter States (Complaint Management)
   const [searchQuery, setSearchQuery] = useState('');
@@ -230,6 +273,9 @@ export default function AdminDashboard() {
     } else if (hash === '#admin/announcements') {
       setViewingComplaintId(null);
       setActiveTab('announcements');
+    } else if (hash === '#admin/panchayat-admins') {
+      setViewingComplaintId(null);
+      setActiveTab('panchayat_admins');
     } else {
       setViewingComplaintId(null);
       setActiveTab('dashboard');
@@ -239,12 +285,14 @@ export default function AdminDashboard() {
   useEffect(() => {
     handleHashRouting();
     window.addEventListener('hashchange', handleHashRouting);
-    
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setLostFoundModalOpen(false);
         setAnnModalOpen(false);
         setAnnDetailsOpen(false);
+        setPaModalOpen(false);
+        setPaViewModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -588,6 +636,169 @@ export default function AdminDashboard() {
       showToast(err.response?.data?.message || 'Failed to remove announcement.', 'error');
     }
   };
+
+  // ─── Panchayat Admins Fetch & CRUD ─────────────────────────────────────────
+  const fetchPanchayatAdmins = async () => {
+    setLoadingPAs(true);
+    try {
+      const params = {};
+      if (paSearchQuery) params.search = paSearchQuery;
+      if (paDistrictFilter) params.district = paDistrictFilter;
+      if (paPanchayatFilter) params.panchayat = paPanchayatFilter;
+      if (paStatusFilter && paStatusFilter !== 'All') params.status = paStatusFilter;
+      const res = await api.get('/admin/panchayat-admins', { params });
+      if (res.data?.success) {
+        setPanchayatAdmins(res.data.admins || []);
+        setPaStats(res.data.stats || { total: 0, active: 0, inactive: 0 });
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to fetch panchayat admins:', err);
+      showToast('Failed to load Panchayat Admins.', 'error');
+    } finally {
+      setLoadingPAs(false);
+    }
+  };
+
+  // Auto-fetch or auto-generate the stable panchayat code from backend
+  const fetchPanchayatCode = async (district, panchayat, localBodyType) => {
+    if (!district || !panchayat) return;
+    setFetchingPaCode(true);
+    setPaFormPanchayatCode(''); // clear while loading
+    try {
+      const res = await api.get('/admin/panchayats/code', {
+        params: { district, panchayat, localBodyType }
+      });
+      if (res.data?.success) {
+        setPaFormPanchayatCode(res.data.code);
+      }
+    } catch (err) {
+      console.error('[PA] Failed to fetch panchayat code:', err);
+      // Fallback: generate a display-only placeholder so the form doesn't stall
+      const dAbbr = district.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+      const pName = panchayat.replace(/\s*(Panchayat|Corporation|Municipality|Grama|Nagar|Town)\s*/gi, '').trim();
+      const pAbbr = (pName || panchayat).replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+      setPaFormPanchayatCode(`${dAbbr}-${pAbbr}-???`);
+      showToast('Could not reach server for panchayat code. Will be assigned on save.', 'error');
+    } finally {
+      setFetchingPaCode(false);
+    }
+  };
+
+
+  const handleOpenPaModal = (item = null) => {
+    setPaEditingItem(item);
+    if (item) {
+      setPaFormName(item.fullName || '');
+      setPaFormEmail(item.email || '');
+      setPaFormPhone(item.mobile || '');
+      setPaFormDistrict(item.district || '');
+      const rawType = item.localBodyType || 'Panchayath';
+      setPaFormLocalBodyType(rawType === 'Grama Panchayath' ? 'Panchayath' : rawType);
+      setPaFormPanchayat(item.panchayat || '');
+      // Load existing code or fetch from backend if missing
+      if (item.panchayatCode) {
+        setPaFormPanchayatCode(item.panchayatCode);
+      } else if (item.district && item.panchayat) {
+        fetchPanchayatCode(item.district, item.panchayat, item.localBodyType);
+      } else {
+        setPaFormPanchayatCode('');
+      }
+      setPaFormStatus(item.status || 'Active');
+      setPaFormPassword('');
+      setPaFormConfirmPassword('');
+      if (item.district) {
+        setPaAvailablePanchayats(getPanchayatsForDistrict(item.district));
+      }
+    } else {
+      setPaFormName(''); setPaFormEmail(''); setPaFormPhone('');
+      setPaFormDistrict(''); setPaFormLocalBodyType('Panchayath');
+      setPaFormPanchayat(''); setPaFormPanchayatCode('');
+      setPaFormPassword(''); setPaFormConfirmPassword('');
+      setPaFormStatus('Active');
+      setPaAvailablePanchayats([]);
+      setFetchingPaCode(false);
+    }
+    setPaModalOpen(true);
+  };
+
+
+  const handleSavePanchayatAdmin = async (e) => {
+    e.preventDefault();
+    if (!paFormName || !paFormEmail || !paFormPhone || !paFormDistrict || !paFormPanchayat) {
+      showToast('Please fill all required fields.', 'error');
+      return;
+    }
+    if (!paEditingItem && !paFormPassword) {
+      showToast('Password is required.', 'error');
+      return;
+    }
+    setSubmittingPA(true);
+    try {
+      let res;
+      if (paEditingItem) {
+        res = await api.put(`/admin/panchayat-admins/${paEditingItem._id}`, {
+          fullName: paFormName,
+          mobile: paFormPhone,
+          district: paFormDistrict,
+          localBodyType: paFormLocalBodyType,
+          panchayat: paFormPanchayat,
+          panchayatCode: paFormPanchayatCode,
+          status: paFormStatus
+        });
+      } else {
+        res = await api.post('/admin/panchayat-admins', {
+          fullName: paFormName,
+          email: paFormEmail,
+          mobile: paFormPhone,
+          password: paFormPassword,
+          confirmPassword: paFormConfirmPassword,
+          district: paFormDistrict,
+          localBodyType: paFormLocalBodyType,
+          panchayat: paFormPanchayat,
+          panchayatCode: paFormPanchayatCode,
+          status: paFormStatus
+        });
+      }
+      if (res.data?.success) {
+        showToast(paEditingItem ? 'Panchayat Admin updated.' : 'Panchayat Admin created successfully.');
+        setPaModalOpen(false);
+        fetchPanchayatAdmins();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to save Panchayat Admin.', 'error');
+    } finally {
+      setSubmittingPA(false);
+    }
+  };
+
+  const handleTogglePAStatus = async (pa) => {
+    const newStatus = pa.status === 'Active' ? 'Inactive' : 'Active';
+    try {
+      const res = await api.patch(`/admin/panchayat-admins/${pa._id}/status`, { status: newStatus });
+      if (res.data?.success) {
+        showToast(`Admin ${newStatus === 'Active' ? 'activated' : 'deactivated'} successfully.`);
+        fetchPanchayatAdmins();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update status.', 'error');
+    }
+  };
+
+  const handleDeletePA = async (paId) => {
+    if (!window.confirm('Are you sure you want to remove this Panchayat Admin?')) return;
+    try {
+      const res = await api.delete(`/admin/panchayat-admins/${paId}`);
+      if (res.data?.success) {
+        showToast('Panchayat Admin removed successfully.');
+        fetchPanchayatAdmins();
+        if (paViewItem?._id === paId) setPaViewModalOpen(false);
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to remove admin.', 'error');
+    }
+  };
+  // ──────────────────────────────────────────────────────────────────────────
+
   const fetchNotifications = async () => {
     try {
       setLoadingNotifications(true);
@@ -654,6 +865,9 @@ export default function AdminDashboard() {
     }
     if (activeTab === 'announcements') {
       fetchAnnouncements();
+    }
+    if (activeTab === 'panchayat_admins') {
+      fetchPanchayatAdmins();
     }
   }, [activeTab]);
 
@@ -1556,6 +1770,13 @@ export default function AdminDashboard() {
             <Megaphone size={18} />
             <span>Announcements</span>
           </button>
+          <button
+            className={`sidebar-item ${activeTab === 'panchayat_admins' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/panchayat-admins'; setActiveTab('panchayat_admins'); }}
+          >
+            <ShieldCheck size={18} />
+            <span>Add Local Admin</span>
+          </button>
           <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
             <TrendingUp size={18} />
             <span>Analytics</span>
@@ -2295,8 +2516,8 @@ export default function AdminDashboard() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <button 
-                    className="admin-btn primary" 
+                  <button
+                    className="admin-btn primary"
                     style={{ gap: '6px', height: '40px', background: 'var(--primary)', color: '#fff', borderRadius: '8px', padding: '0 16px', display: 'flex', alignItems: 'center', fontSize: '0.85rem', fontWeight: 700 }}
                     onClick={() => handleOpenAnnModal(null)}
                   >
@@ -2544,34 +2765,34 @@ export default function AdminDashboard() {
                     <form onSubmit={handleSaveAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Announcement Title *</label>
-                        <input 
-                          type="text" 
-                          value={annFormTitle} 
-                          onChange={(e) => setAnnFormTitle(e.target.value)} 
-                          required 
-                          style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} 
-                          placeholder="e.g. Scheduled Road Maintenance notice" 
+                        <input
+                          type="text"
+                          value={annFormTitle}
+                          onChange={(e) => setAnnFormTitle(e.target.value)}
+                          required
+                          style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }}
+                          placeholder="e.g. Scheduled Road Maintenance notice"
                         />
                       </div>
 
                       <div>
                         <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Description / Content *</label>
-                        <textarea 
-                          value={annFormDescription} 
-                          onChange={(e) => setAnnFormDescription(e.target.value)} 
-                          required 
-                          rows={4} 
-                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.5 }} 
-                          placeholder="Provide details about dates, alternate routes, affected services..." 
+                        <textarea
+                          value={annFormDescription}
+                          onChange={(e) => setAnnFormDescription(e.target.value)}
+                          required
+                          rows={4}
+                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.5 }}
+                          placeholder="Provide details about dates, alternate routes, affected services..."
                         />
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Category *</label>
-                          <select 
-                            value={annFormCategory} 
-                            onChange={(e) => setAnnFormCategory(e.target.value)} 
+                          <select
+                            value={annFormCategory}
+                            onChange={(e) => setAnnFormCategory(e.target.value)}
                             style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
                           >
                             <option value="General">General</option>
@@ -2587,9 +2808,9 @@ export default function AdminDashboard() {
                         </div>
                         <div>
                           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Priority Level</label>
-                          <select 
-                            value={annFormPriority} 
-                            onChange={(e) => setAnnFormPriority(e.target.value)} 
+                          <select
+                            value={annFormPriority}
+                            onChange={(e) => setAnnFormPriority(e.target.value)}
                             style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
                           >
                             <option value="Normal">Normal</option>
@@ -2634,26 +2855,26 @@ export default function AdminDashboard() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Expiry Date (Optional)</label>
-                          <input 
-                            type="date" 
-                            value={annFormExpiryDate} 
-                            onChange={(e) => setAnnFormExpiryDate(e.target.value)} 
-                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} 
+                          <input
+                            type="date"
+                            value={annFormExpiryDate}
+                            onChange={(e) => setAnnFormExpiryDate(e.target.value)}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }}
                           />
                         </div>
                       </div>
 
                       <div>
                         <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Attachment Image (Optional)</label>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
+                        <input
+                          type="file"
+                          accept="image/*"
                           onChange={(e) => {
                             if (e.target.files && e.target.files[0]) {
                               setAnnFormAttachment(e.target.files[0]);
                             }
-                          }} 
-                          style={{ fontSize: '0.85rem' }} 
+                          }}
+                          style={{ fontSize: '0.85rem' }}
                         />
                       </div>
 
@@ -4230,8 +4451,8 @@ export default function AdminDashboard() {
 
         {/* Lost & Found Item Details Modal */}
         {lostFoundModalOpen && selectedLostFoundItem && (
-          <div 
-            className="admin-modal-overlay" 
+          <div
+            className="admin-modal-overlay"
             onClick={() => setLostFoundModalOpen(false)}
             style={{
               position: 'fixed',
@@ -4247,13 +4468,13 @@ export default function AdminDashboard() {
               zIndex: 2000
             }}
           >
-            <div 
-              className="admin-modal-container" 
-              onClick={(e) => e.stopPropagation()} 
-              style={{ 
-                padding: '24px', 
+            <div
+              className="admin-modal-container"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                padding: '24px',
                 width: '90%',
-                maxWidth: '700px', 
+                maxWidth: '700px',
                 maxHeight: '80vh',
                 display: 'flex',
                 flexDirection: 'column',
@@ -4277,7 +4498,7 @@ export default function AdminDashboard() {
 
               {/* Scrollable Content Body */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingRight: '4px', flex: 1 }}>
-                
+
                 {/* Image Area */}
                 <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', background: '#f8fafc', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
                   {selectedLostFoundItem?.image ? (
@@ -4469,6 +4690,362 @@ export default function AdminDashboard() {
 
 
 
+        {/* ==========================================
+            PANCHAYAT ADMINS MANAGEMENT PAGE
+            ========================================== */}
+        {activeTab === 'panchayat_admins' && (() => {
+          const filteredPAs = panchayatAdmins.filter(pa => {
+            const matchSearch = !paSearchQuery ||
+              pa.fullName?.toLowerCase().includes(paSearchQuery.toLowerCase()) ||
+              pa.email?.toLowerCase().includes(paSearchQuery.toLowerCase()) ||
+              pa.mobile?.includes(paSearchQuery);
+            const matchDistrict = !paDistrictFilter || pa.district === paDistrictFilter;
+            const matchPanchayat = !paPanchayatFilter || pa.panchayat === paPanchayatFilter;
+            const matchStatus = !paStatusFilter || paStatusFilter === 'All' || pa.status === paStatusFilter;
+            return matchSearch && matchDistrict && matchPanchayat && matchStatus;
+          });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Header */}
+              <div className="admin-flex-row" style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-dark)' }}>Local Admins</h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>Manage and assign administrative access to local-body administrators</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button className="admin-btn secondary" onClick={fetchPanchayatAdmins} style={{ gap: '6px' }}>
+                    <RefreshCw size={14} className={loadingPAs ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                  <button
+                    className="admin-btn primary"
+                    style={{ gap: '6px', background: 'linear-gradient(135deg, #1d4ed8, #2563eb)', color: '#fff' }}
+                    onClick={() => handleOpenPaModal(null)}
+                  >
+                    <Plus size={16} /> Add Local Admin
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                {[
+                  { label: 'Total Admins', value: paStats.total, icon: ShieldCheck, color: '#2563eb', bg: '#eff6ff' },
+                  { label: 'Active', value: paStats.active, icon: UserCheck, color: '#059669', bg: '#f0fdf4' },
+                  { label: 'Inactive', value: paStats.inactive, icon: AlertCircle, color: '#dc2626', bg: '#fef2f2' },
+                ].map((card, i) => (
+                  <div key={i} className="compact-stat-card">
+                    <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: card.bg, color: card.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <card.icon size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{card.label}</div>
+                      <div style={{ fontSize: '1.35rem', fontWeight: 800, color: card.color, marginTop: '2px', lineHeight: 1.1 }}>{card.value}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Filter Toolbar */}
+              <div className="unified-filter-toolbar">
+                <div className="search-input-wrapper" style={{ flex: 2, minWidth: '220px' }}>
+                  <Search size={16} className="search-icon" style={{ top: '12px' }} />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email or phone..."
+                    value={paSearchQuery}
+                    onChange={e => setPaSearchQuery(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <select value={paDistrictFilter} onChange={e => { setPaDistrictFilter(e.target.value); setPaPanchayatFilter(''); }} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid #cbd5e1', background: '#fff' }}>
+                  <option value="">All Districts</option>
+                  {KERALA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <select value={paPanchayatFilter} onChange={e => setPaPanchayatFilter(e.target.value)} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid #cbd5e1', background: '#fff' }}>
+                  <option value="">All Panchayats</option>
+                  {(paDistrictFilter ? getPanchayatsForDistrict(paDistrictFilter) : [...new Set(panchayatAdmins.map(p => p.panchayat).filter(Boolean))]).map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <select value={paStatusFilter} onChange={e => setPaStatusFilter(e.target.value)} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid #cbd5e1', background: '#fff' }}>
+                  <option value="All">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <button className="admin-btn secondary" onClick={() => { setPaSearchQuery(''); setPaDistrictFilter(''); setPaPanchayatFilter(''); setPaStatusFilter('All'); }} style={{ fontSize: '0.82rem', fontWeight: 700, background: '#f1f5f9' }}>
+                  Clear
+                </button>
+              </div>
+
+              {/* Table */}
+              {loadingPAs ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+                  <div style={{ width: '36px', height: '36px', border: '3px solid #2563eb', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+                </div>
+              ) : filteredPAs.length === 0 ? (
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '64px 32px', textAlign: 'center' }}>
+                  <ShieldCheck size={48} style={{ color: '#e2e8f0', marginBottom: '16px' }} />
+                  <h3 style={{ color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>No Panchayat Admins Found</h3>
+                  <p style={{ color: '#b0bec5', fontSize: '0.85rem', marginBottom: '20px' }}>
+                    {panchayatAdmins.length === 0
+                      ? 'No Panchayat Admins have been added yet.'
+                      : 'No admins match your current filters.'}
+                  </p>
+                  <button className="admin-btn primary" style={{ background: '#2563eb', color: '#fff', gap: '6px' }} onClick={() => handleOpenPaModal(null)}>
+                    <Plus size={15} /> Add First Panchayath Admin
+                  </button>
+                </div>
+              ) : (
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                          {['Admin', 'District / Panchayat', 'Contact', 'Code', 'Status', 'Joined', 'Actions'].map(h => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPAs.map(pa => (
+                          <tr key={pa._id} style={{ borderBottom: '1px solid #f8fafc', transition: 'background 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td style={{ padding: '14px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #1d4ed8, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.9rem', flexShrink: 0 }}>
+                                  {pa.fullName?.[0]?.toUpperCase() || 'P'}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.88rem' }}>{pa.fullName}</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{pa.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '14px 16px' }}>
+                              <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.84rem' }}>{pa.district || '—'}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>{pa.panchayat || '—'}</div>
+                            </td>
+                            <td style={{ padding: '14px 16px', color: '#475569' }}>{pa.mobile || '—'}</td>
+                            <td style={{ padding: '14px 16px', color: '#475569', fontFamily: 'monospace', fontSize: '0.8rem' }}>{pa.panchayatCode || '—'}</td>
+                            <td style={{ padding: '14px 16px' }}>
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                padding: '4px 12px', borderRadius: '20px', fontWeight: 700, fontSize: '0.75rem',
+                                background: pa.status === 'Active' ? '#f0fdf4' : '#fef2f2',
+                                color: pa.status === 'Active' ? '#059669' : '#dc2626'
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: pa.status === 'Active' ? '#059669' : '#dc2626', display: 'inline-block' }} />
+                                {pa.status || 'Active'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '14px 16px', color: '#64748b', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                              {pa.createdAt ? new Date(pa.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </td>
+                            <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <button onClick={() => { setPaViewItem(pa); setPaViewModalOpen(true); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Eye size={13} /> View
+                                </button>
+                                <button onClick={() => handleOpenPaModal(pa)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Edit3 size={13} /> Edit
+                                </button>
+                                <button onClick={() => handleTogglePAStatus(pa)} style={{ background: pa.status === 'Active' ? '#fffbeb' : '#f0fdf4', color: pa.status === 'Active' ? '#b45309' : '#059669', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700 }}>
+                                  {pa.status === 'Active' ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button onClick={() => handleDeletePA(pa._id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', fontSize: '0.8rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Showing <strong>{filteredPAs.length}</strong> of <strong>{panchayatAdmins.length}</strong> Panchayat Admins</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Add / Edit Panchayat Admin Modal */}
+        {paModalOpen && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px', backdropFilter: 'blur(4px)' }}>
+            <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '680px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+              {/* Modal Header */}
+              <div style={{ padding: '24px 28px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#1e293b' }}>
+                    {paEditingItem ? 'Edit Local Admin' : 'Add Local Admin'}
+                  </h2>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                    {paEditingItem ? 'Update the admin details below.' : 'Create a new local-body administrator account.'}
+                  </p>
+                </div>
+                <button onClick={() => setPaModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '10px', padding: '8px', cursor: 'pointer', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSavePanchayatAdmin} style={{ padding: '20px 28px 28px' }}>
+                {/* Personal Info */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>Personal Information</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Full Name <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="text" value={paFormName} onChange={e => setPaFormName(e.target.value)} required placeholder="Enter full name" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Phone Number <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="tel" value={paFormPhone} onChange={e => setPaFormPhone(e.target.value)} required placeholder="10-digit mobile" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Email Address <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="email" value={paFormEmail} onChange={e => setPaFormEmail(e.target.value)} required={!paEditingItem} disabled={!!paEditingItem} placeholder="admin@example.com" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', background: paEditingItem ? '#f8fafc' : '#fff', color: paEditingItem ? '#94a3b8' : '#1e293b' }} />
+                      {paEditingItem && <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', display: 'block' }}>Email cannot be changed after creation.</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>Location Assignment</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>District <span style={{ color: '#ef4444' }}>*</span></label>
+                      <select value={paFormDistrict} onChange={e => { const dist = e.target.value; setPaFormDistrict(dist); setPaFormPanchayat(''); setPaFormPanchayatCode(''); setPaAvailablePanchayats(getPanchayatsForDistrict(dist)); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                        <option value="">Select District</option>
+                        {KERALA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Local Body Type</label>
+                      <select value={paFormLocalBodyType} onChange={e => { setPaFormLocalBodyType(e.target.value); setPaFormPanchayat(''); setPaFormPanchayatCode(''); }} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                        <option value="Panchayath">Panchayath</option>
+                        <option value="Municipality">Municipality</option>
+                      </select>
+                    </div>
+                    {paFormLocalBodyType === 'Panchayath' ? (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Panchayath <span style={{ color: '#ef4444' }}>*</span></label>
+                        <select value={paFormPanchayat} onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                          <option value="">{paFormDistrict ? 'Select Panchayath' : 'Select District first'}</option>
+                          {getLocationsByDistrictAndType(paFormDistrict, 'PANCHAYATH').map(loc => (
+                            <option key={loc.name} value={loc.name}>{loc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Municipality <span style={{ color: '#ef4444' }}>*</span></label>
+                        <select value={paFormPanchayat} onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                          <option value="">{paFormDistrict ? 'Select Municipality' : 'Select District first'}</option>
+                          {getLocationsByDistrictAndType(paFormDistrict, 'MUNICIPALITY').map(loc => (
+                            <option key={loc.name} value={loc.name}>{loc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Password (only on create) */}
+                {!paEditingItem && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>Access Credentials</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Password <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input type="password" value={paFormPassword} onChange={e => setPaFormPassword(e.target.value)} required placeholder="Min. 8 characters" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Confirm Password <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input type="password" value={paFormConfirmPassword} onChange={e => setPaFormConfirmPassword(e.target.value)} required placeholder="Re-enter password" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Status</label>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {['Active', 'Inactive'].map(s => (
+                      <button key={s} type="button" onClick={() => setPaFormStatus(s)}
+                        style={{ flex: 1, padding: '10px', borderRadius: '10px', border: `2px solid ${paFormStatus === s ? (s === 'Active' ? '#059669' : '#dc2626') : '#e2e8f0'}`, background: paFormStatus === s ? (s === 'Active' ? '#f0fdf4' : '#fef2f2') : '#fff', color: paFormStatus === s ? (s === 'Active' ? '#059669' : '#dc2626') : '#64748b', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                  <button type="button" className="admin-btn secondary" onClick={() => setPaModalOpen(false)}>Cancel</button>
+                  <button type="submit" className="admin-btn primary" disabled={submittingPA} style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)', color: '#fff', gap: '6px', minWidth: '120px' }}>
+                    {submittingPA ? 'Saving...' : (paEditingItem ? 'Save Changes' : 'Create Admin')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* View Panchayat Admin Modal */}
+        {paViewModalOpen && paViewItem && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px', backdropFilter: 'blur(4px)' }}>
+            <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '540px', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+              <div style={{ padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'linear-gradient(135deg, #1d4ed8, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.3rem' }}>
+                    {paViewItem.fullName?.[0]?.toUpperCase() || 'P'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>{paViewItem.fullName}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{paViewItem.email}</div>
+                    <span style={{ display: 'inline-block', marginTop: '4px', padding: '2px 10px', borderRadius: '20px', fontWeight: 700, fontSize: '0.72rem', background: paViewItem.status === 'Active' ? '#f0fdf4' : '#fef2f2', color: paViewItem.status === 'Active' ? '#059669' : '#dc2626' }}>
+                      {paViewItem.status || 'Active'}
+                    </span>
+                  </div>
+                </div>
+                <button onClick={() => setPaViewModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '10px', padding: '8px', cursor: 'pointer', color: '#475569', display: 'flex' }}>
+                  <X size={18} />
+                </button>
+              </div>
+              <div style={{ padding: '20px 28px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                  {[
+                    { label: 'Phone', value: paViewItem.mobile || '—' },
+                    { label: 'District', value: paViewItem.district || '—' },
+                    { label: 'Local Body Type', value: paViewItem.localBodyType || '—' },
+                    { label: 'Panchayath', value: paViewItem.panchayat || '—' },
+                    { label: 'Panchayath Code', value: paViewItem.panchayatCode || '—' },
+                    { label: 'Account Created', value: paViewItem.createdAt ? new Date(paViewItem.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
+                  ].map((item, i) => (
+                    <div key={i} style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px' }}>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>{item.label}</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#1e293b' }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+                  <button className="admin-btn secondary" onClick={() => setPaViewModalOpen(false)}>Close</button>
+                  <button className="admin-btn secondary" style={{ background: '#eff6ff', color: '#2563eb' }} onClick={() => { setPaViewModalOpen(false); handleOpenPaModal(paViewItem); }}>
+                    <Edit3 size={14} /> Edit
+                  </button>
+                  <button className="admin-btn danger" onClick={() => handleDeletePA(paViewItem._id)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Trash2 size={14} /> Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </main>
 

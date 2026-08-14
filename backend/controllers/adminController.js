@@ -270,17 +270,17 @@ const getAdminStats = asyncHandler(async (req, res) => {
     const year = d.getFullYear();
     const month = d.getMonth();
     const monthName = d.toLocaleString('en-US', { month: 'short' });
-    
+
     const startOfMonth = new Date(year, month, 1);
     const endOfMonth = new Date(year, month + 1, 1);
-    
+
     const count = await Complaint.countDocuments({
       createdAt: {
         $gte: startOfMonth,
         $lt: endOfMonth
       }
     });
-    
+
     complaintTrends.push({ month: monthName, count });
   }
 
@@ -290,17 +290,17 @@ const getAdminStats = asyncHandler(async (req, res) => {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dayLabel = d.toLocaleString('en-US', { weekday: 'short' });
-    
+
     const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-    
+
     const count = await Complaint.countDocuments({
       createdAt: {
         $gte: startOfDay,
         $lt: endOfDay
       }
     });
-    
+
     dailyTrends.push({ day: dayLabel, count });
   }
 
@@ -443,6 +443,19 @@ const getAllComplaints = asyncHandler(async (req, res) => {
   const { search, category, status, priority, department, startDate, endDate } = req.query;
   const filter = {};
 
+  // ─── PANCHAYAT ADMIN SCOPE ─────────────────────────────────────────────────
+  const isPanchayatAdmin = req.user.role &&
+    ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+  if (isPanchayatAdmin) {
+    // Only show complaints from users in this admin's panchayat
+    if (req.user.district) filter.district = req.user.district;
+    if (req.user.panchayat) {
+      const panchayatUsers = await User.find({ panchayat: req.user.panchayat, isDeleted: { $ne: true } }).select('_id');
+      filter.user = { $in: panchayatUsers.map(u => u._id) };
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   if (category) filter.category = category;
   if (status) filter.status = status;
   if (priority) filter.priority = priority;
@@ -464,11 +477,21 @@ const getAllComplaints = asyncHandler(async (req, res) => {
     }).select('_id');
     const matchedUserIds = matchedUsers.map(u => u._id);
 
-    filter.$or = [
-      { complaintId: { $regex: search, $options: 'i' } },
-      { title: { $regex: search, $options: 'i' } },
-      { user: { $in: matchedUserIds } }
-    ];
+    const searchCondition = {
+      $or: [
+        { complaintId: { $regex: search, $options: 'i' } },
+        { title: { $regex: search, $options: 'i' } },
+        { user: { $in: matchedUserIds } }
+      ]
+    };
+
+    // Merge with existing $and if present
+    if (filter.user) {
+      filter.$and = [{ user: filter.user }, searchCondition];
+      delete filter.user;
+    } else {
+      Object.assign(filter, searchCondition);
+    }
   }
 
   const complaints = await Complaint.find(filter)
@@ -481,6 +504,8 @@ const getAllComplaints = asyncHandler(async (req, res) => {
     complaints
   });
 });
+
+
 
 // @desc    Get single complaint details
 // @route   GET /api/admin/complaints/:id
@@ -771,6 +796,17 @@ const getAllUsers = asyncHandler(async (req, res) => {
   // Base query: all registered users (citizens & admins), not deleted
   let query = { isDeleted: { $ne: true } };
 
+  // ─── PANCHAYAT ADMIN SCOPE ─────────────────────────────────────────────────
+  const isPanchayatAdminUser = req.user.role &&
+    ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+  if (isPanchayatAdminUser) {
+    // Only show citizens in this panchayat's area
+    query.role = { $in: ['citizen', 'Citizen'] };
+    if (req.user.panchayat) query.panchayat = req.user.panchayat;
+    else if (req.user.district) query.district = req.user.district;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   // Search by Name, Email, or Phone
   if (search) {
     const searchRegex = new RegExp(search, 'i');
@@ -804,6 +840,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     endOfDay.setUTCHours(23, 59, 59, 999);
     query.createdAt = { $gte: startOfDay, $lte: endOfDay };
   }
+
 
   // Execute query with pagination and safety deselect on passwords/tokens
   const users = await User.find(query)
@@ -1206,6 +1243,247 @@ const exportUsers = asyncHandler(async (req, res) => {
   res.status(200).send(csvContent);
 });
 
+// ==========================================
+// Panchayat Admin Management
+// ==========================================
+
+// @desc    Get all panchayat admins with filters and stats
+// @route   GET /api/admin/panchayat-admins
+// @access  Private (Super Admin / Main Admin)
+const getPanchayatAdmins = asyncHandler(async (req, res) => {
+  const { search, district, panchayat, status } = req.query;
+
+  const filter = {
+    role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] },
+    isDeleted: { $ne: true }
+  };
+
+  if (search) {
+    filter.$or = [
+      { fullName: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { mobile: { $regex: search, $options: 'i' } }
+    ];
+  }
+  if (district) filter.district = district;
+  if (panchayat) filter.panchayat = panchayat;
+  if (status && status !== 'All') filter.status = status;
+
+  const admins = await User.find(filter)
+    .select('-password -resetPasswordToken -resetPasswordExpire -passwordResetToken -passwordResetExpires -passwordResetOtp -passwordResetOtpExpires')
+    .sort({ createdAt: -1 });
+
+  const total = await User.countDocuments({ role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] }, isDeleted: { $ne: true } });
+  const active = await User.countDocuments({ role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] }, isDeleted: { $ne: true }, status: 'Active' });
+  const inactive = await User.countDocuments({ role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] }, isDeleted: { $ne: true }, status: { $ne: 'Active' } });
+
+  res.status(200).json({
+    success: true,
+    admins,
+    stats: { total, active, inactive }
+  });
+});
+
+// @desc    Create a new panchayat admin
+// @route   POST /api/admin/panchayat-admins
+// @access  Private (Super Admin / Main Admin)
+const createPanchayatAdmin = asyncHandler(async (req, res) => {
+  const { fullName, email, mobile, password, confirmPassword, district, localBodyType, panchayat, panchayatCode, status } = req.body;
+
+  if (!fullName || !email || !mobile || !password || !district || !panchayat) {
+    return res.status(400).json({ message: 'Please provide Full Name, Email, Phone, Password, District, and Panchayat' });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: 'Passwords do not match' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters' });
+  }
+
+  const emailExists = await User.findOne({ email: email.toLowerCase(), isDeleted: { $ne: true } });
+  if (emailExists) {
+    return res.status(400).json({ message: 'An account with this email already exists' });
+  }
+
+  const admin = await User.create({
+    fullName,
+    email: email.toLowerCase(),
+    mobile,
+    password,
+    role: 'panchayat_admin',
+    district,
+    panchayat,
+    localBodyType: localBodyType || 'Grama Panchayath',
+    panchayatCode: panchayatCode || '',
+    status: status || 'Active',
+    isVerified: true
+  });
+
+  res.status(201).json({
+    success: true,
+    admin: {
+      _id: admin._id,
+      fullName: admin.fullName,
+      email: admin.email,
+      mobile: admin.mobile,
+      role: admin.role,
+      district: admin.district,
+      panchayat: admin.panchayat,
+      localBodyType: admin.localBodyType,
+      panchayatCode: admin.panchayatCode,
+      status: admin.status,
+      createdAt: admin.createdAt
+    }
+  });
+});
+
+// @desc    Update panchayat admin details
+// @route   PUT /api/admin/panchayat-admins/:id
+// @access  Private (Super Admin / Main Admin)
+const updatePanchayatAdmin = asyncHandler(async (req, res) => {
+  const { fullName, mobile, district, localBodyType, panchayat, panchayatCode, status } = req.body;
+
+  const admin = await User.findOne({
+    _id: req.params.id,
+    role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] },
+    isDeleted: { $ne: true }
+  });
+
+  if (!admin) {
+    return res.status(404).json({ message: 'Panchayat Admin not found' });
+  }
+
+  if (fullName) admin.fullName = fullName;
+  if (mobile) admin.mobile = mobile;
+  if (district) admin.district = district;
+  if (localBodyType) admin.localBodyType = localBodyType;
+  if (panchayat) admin.panchayat = panchayat;
+  if (panchayatCode !== undefined) admin.panchayatCode = panchayatCode;
+  if (status) admin.status = status;
+
+  await admin.save();
+
+  res.status(200).json({
+    success: true,
+    admin: {
+      _id: admin._id,
+      fullName: admin.fullName,
+      email: admin.email,
+      mobile: admin.mobile,
+      role: admin.role,
+      district: admin.district,
+      panchayat: admin.panchayat,
+      localBodyType: admin.localBodyType,
+      panchayatCode: admin.panchayatCode,
+      status: admin.status,
+      createdAt: admin.createdAt
+    }
+  });
+});
+
+// @desc    Toggle panchayat admin status Active <-> Inactive
+// @route   PATCH /api/admin/panchayat-admins/:id/status
+// @access  Private (Super Admin / Main Admin)
+const togglePanchayatAdminStatus = asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  if (!status || !['Active', 'Inactive', 'Blocked'].includes(status)) {
+    return res.status(400).json({ message: 'Valid status required (Active / Inactive)' });
+  }
+
+  const admin = await User.findOne({
+    _id: req.params.id,
+    role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] },
+    isDeleted: { $ne: true }
+  });
+
+  if (!admin) {
+    return res.status(404).json({ message: 'Panchayat Admin not found' });
+  }
+
+  admin.status = status;
+  await admin.save();
+
+  res.status(200).json({
+    success: true,
+    message: `Panchayat Admin status updated to ${status}`,
+    admin: { _id: admin._id, status: admin.status }
+  });
+});
+
+// @desc    Soft delete panchayat admin
+// @route   DELETE /api/admin/panchayat-admins/:id
+// @access  Private (Super Admin / Main Admin)
+const deletePanchayatAdmin = asyncHandler(async (req, res) => {
+  const admin = await User.findOne({
+    _id: req.params.id,
+    role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] },
+    isDeleted: { $ne: true }
+  });
+
+  if (!admin) {
+    return res.status(404).json({ message: 'Panchayat Admin not found' });
+  }
+
+  admin.isDeleted = true;
+  admin.panchayatId = null;
+  await admin.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Panchayat Admin removed successfully'
+  });
+});
+
+// @desc    Get dashboard stats scoped to panchayat admin's area
+// @route   GET /api/admin/panchayat-admin/stats
+// @access  Private (panchayat_admin)
+const getPanchayatAdminDashboardStats = asyncHandler(async (req, res) => {
+  const { panchayat, district } = req.user;
+
+  // Get citizens in this panchayat
+  const citizenQuery = { role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true } };
+  if (panchayat) citizenQuery.panchayat = panchayat;
+  else if (district) citizenQuery.district = district;
+
+  const citizenIds = (await User.find(citizenQuery).select('_id')).map(u => u._id);
+
+  const complaintFilter = { user: { $in: citizenIds } };
+
+  const [
+    totalCitizens,
+    totalComplaints,
+    pendingComplaints,
+    inProgressComplaints,
+    resolvedComplaints
+  ] = await Promise.all([
+    User.countDocuments(citizenQuery),
+    Complaint.countDocuments(complaintFilter),
+    Complaint.countDocuments({ ...complaintFilter, status: 'Pending' }),
+    Complaint.countDocuments({ ...complaintFilter, status: 'In Progress' }),
+    Complaint.countDocuments({ ...complaintFilter, status: 'Resolved' })
+  ]);
+
+  // Recent complaints
+  const recentComplaints = await Complaint.find(complaintFilter)
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate('user', 'fullName');
+
+  res.status(200).json({
+    success: true,
+    panchayat: panchayat || '',
+    district: district || '',
+    stats: {
+      totalCitizens,
+      totalComplaints,
+      pendingComplaints,
+      inProgressComplaints,
+      resolvedComplaints
+    },
+    recentComplaints
+  });
+});
+
 module.exports = {
   getAdminStats,
   getAllComplaints,
@@ -1220,5 +1498,13 @@ module.exports = {
   unblockUser,
   deleteUser,
   resetUserPassword,
-  exportUsers
+  exportUsers,
+  // Panchayat Admin Management
+  getPanchayatAdmins,
+  createPanchayatAdmin,
+  updatePanchayatAdmin,
+  togglePanchayatAdminStatus,
+  deletePanchayatAdmin,
+  getPanchayatAdminDashboardStats
 };
+

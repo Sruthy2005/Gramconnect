@@ -295,6 +295,79 @@ const getPotentialAdmins = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get (or generate) a stable unique Panchayat Code for a given district+panchayat
+// @route   GET /api/admin/panchayats/code?district=X&panchayat=Y&localBodyType=Z
+// @access  Private (Super Admin / Main Admin)
+const getPanchayatCode = asyncHandler(async (req, res) => {
+  const { district, panchayat, localBodyType } = req.query;
+
+  if (!district || !panchayat) {
+    return res.status(400).json({ message: 'District and Panchayat are required' });
+  }
+
+  // 1. First look in the Panchayat collection (by name + district, case-insensitive)
+  let record = await Panchayat.findOne({
+    name: { $regex: new RegExp(`^${panchayat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    district: { $regex: new RegExp(`^${district.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    isDeleted: { $ne: true }
+  });
+
+  // 2. If the record already has a code, return it immediately
+  if (record && record.panchayatCode) {
+    return res.status(200).json({ success: true, code: record.panchayatCode, source: 'existing' });
+  }
+
+  // 3. Generate a new code using the format: DIST-PANCH-SEQ
+  //    e.g. Kottayam + Erumeli => KTY-ERU-001
+  const generateCode = async (districtName, panchayatName) => {
+    // Build 3-char district abbreviation (first 3 alpha chars, uppercase)
+    const distAbbr = districtName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+
+    // Build 3-char panchayat abbreviation (strip "Panchayat"/"Corporation"/"Municipality" suffix)
+    const cleanPanch = panchayatName
+      .replace(/\s*(Panchayat|Corporation|Municipality|Grama|Nagar|Town)\s*/gi, '')
+      .trim();
+    const panchAbbr = (cleanPanch || panchayatName).replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
+
+    const prefix = `${distAbbr}-${panchAbbr}`;
+
+    // Count how many codes already start with this prefix to determine sequence
+    const existingWithPrefix = await Panchayat.countDocuments({
+      panchayatCode: { $regex: `^${prefix}-`, $options: 'i' },
+      isDeleted: { $ne: true }
+    });
+
+    // Also check User collection for any panchayat_admin users with matching code prefix
+    const User = require('../models/User');
+    const existingUserCodes = await User.countDocuments({
+      panchayatCode: { $regex: `^${prefix}-`, $options: 'i' },
+      isDeleted: { $ne: true }
+    });
+
+    const seqNum = Math.max(existingWithPrefix, existingUserCodes) + 1;
+    return `${prefix}-${String(seqNum).padStart(3, '0')}`;
+  };
+
+  const newCode = await generateCode(district, panchayat);
+
+  // 4. Persist the code: update existing record or create a lightweight one
+  if (record) {
+    record.panchayatCode = newCode;
+    await record.save();
+  } else {
+    // Create a minimal Panchayat record to lock the code
+    await Panchayat.create({
+      name: panchayat,
+      district,
+      state: 'Kerala',
+      status: 'Active',
+      panchayatCode: newCode
+    });
+  }
+
+  return res.status(200).json({ success: true, code: newCode, source: 'generated' });
+});
+
 module.exports = {
   getPanchayats,
   getPanchayatById,
@@ -302,5 +375,6 @@ module.exports = {
   updatePanchayat,
   updatePanchayatStatus,
   deletePanchayat,
-  getPotentialAdmins
+  getPotentialAdmins,
+  getPanchayatCode
 };

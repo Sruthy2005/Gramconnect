@@ -7,6 +7,15 @@ import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import UserDashboard from './components/UserDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import PanchayatAdminDashboard from './components/PanchayatAdminDashboard';
+
+/** Returns true if role is a main admin or super admin (full access) */
+const isMainAdmin = (role) =>
+  role && ['admin', 'Admin', 'SUPER_ADMIN', 'super_admin'].includes(role);
+
+/** Returns true if role is a panchayat-level admin */
+const isPanchayatAdmin = (role) =>
+  role && ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(role);
 
 export default function App() {
   const [route, setRoute] = useState(window.location.hash);
@@ -35,6 +44,10 @@ export default function App() {
       setRoute(targetHash);
     } else if (window.location.pathname.startsWith('/admin/dashboard') || window.location.pathname === '/admin') {
       const targetHash = '#admin';
+      window.history.replaceState(null, '', `/${targetHash}`);
+      setRoute(targetHash);
+    } else if (window.location.pathname.startsWith('/panchayat-admin')) {
+      const targetHash = '#panchayat-admin';
       window.history.replaceState(null, '', `/${targetHash}`);
       setRoute(targetHash);
     }
@@ -77,33 +90,53 @@ export default function App() {
   }, []);
 
 
-  // Central Auth Routing Protection (Requirement 3, 4, 5 & Admin Role Guard)
+  // Central Auth Routing Protection
   useEffect(() => {
     if (!loading) {
       if (user) {
-        const isAdmin = user.role && (user.role.toLowerCase() === 'admin');
+        const adminUser = isMainAdmin(user.role);
+        const panchayatAdminUser = isPanchayatAdmin(user.role);
 
         // Authenticated: Prevent viewing auth pages
         if (route === '#login' || route === '#register' || route === '#forgot-password') {
-          const dest = isAdmin ? 'admin/dashboard' : 'dashboard';
-          window.location.replace(`/${dest}`);
-          setRoute(isAdmin ? '#admin' : '#dashboard');
+          if (adminUser) {
+            window.location.replace('/admin/dashboard');
+            setRoute('#admin');
+          } else if (panchayatAdminUser) {
+            window.location.replace('/#panchayat-admin');
+            setRoute('#panchayat-admin');
+          } else {
+            window.location.replace('/dashboard');
+            setRoute('#dashboard');
+          }
         }
 
-        // Citizens should not access admin section
-        if (route.startsWith('#admin') && !isAdmin) {
+        // Citizens should not access admin sections
+        if (route.startsWith('#admin') && !adminUser && !panchayatAdminUser) {
           window.location.replace('/dashboard');
           setRoute('#dashboard');
         }
 
-        // Admins should navigate to admin workspace
-        if (route.startsWith('#dashboard') && isAdmin) {
+        // Panchayat admins should not access main admin section
+        if (route.startsWith('#admin') && panchayatAdminUser && !adminUser) {
+          window.location.replace('/#panchayat-admin');
+          setRoute('#panchayat-admin');
+        }
+
+        // Main admins should navigate to admin workspace
+        if (route.startsWith('#dashboard') && adminUser) {
           window.location.replace('/admin/dashboard');
           setRoute('#admin');
         }
+
+        // Panchayat admins sent to /dashboard should go to panchayat-admin
+        if (route.startsWith('#dashboard') && panchayatAdminUser) {
+          window.location.replace('/#panchayat-admin');
+          setRoute('#panchayat-admin');
+        }
       } else {
         // Unauthenticated: Prevent viewing protected pages
-        if (route.startsWith('#dashboard') || route.startsWith('#admin')) {
+        if (route.startsWith('#dashboard') || route.startsWith('#admin') || route.startsWith('#panchayat-admin')) {
           window.location.replace('/#login');
           setRoute('#login');
         }
@@ -130,6 +163,10 @@ export default function App() {
 
   if (route === '#forgot-password') {
     return <ForgotPasswordPage />;
+  }
+
+  if (route.startsWith('#panchayat-admin')) {
+    return <PanchayatAdminDashboard />;
   }
 
   if (route.startsWith('#dashboard')) {

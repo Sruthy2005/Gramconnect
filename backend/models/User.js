@@ -91,6 +91,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    panchayatCode: {
+      type: String,
+      default: ''
+    },
     googleId: {
       type: String
     },

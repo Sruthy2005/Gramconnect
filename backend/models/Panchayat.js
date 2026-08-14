@@ -53,6 +53,13 @@ const panchayatSchema = new mongoose.Schema(
       ref: 'User',
       default: null
     },
+    panchayatCode: {
+      type: String,
+      default: '',
+      trim: true,
+      // sparse unique: only enforced when a value is present
+      index: { sparse: true }
+    },
     isDeleted: {
       type: Boolean,
       default: false
