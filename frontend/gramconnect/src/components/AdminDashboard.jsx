@@ -193,6 +193,69 @@ export default function AdminDashboard() {
   const [loadingPAs, setLoadingPAs] = useState(false);
   const [paStats, setPaStats] = useState({ total: 0, active: 0, inactive: 0 });
   const [paSearchQuery, setPaSearchQuery] = useState('');
+
+  // Analytics Dashboard states
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
+  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
+  const [panchayatSearch, setPanchayatSearch] = useState('');
+
+  // Settings Dashboard states
+  const [settingsActiveSection, setSettingsActiveSection] = useState('profile');
+  const [settingsPanchayats, setSettingsPanchayats] = useState([]);
+  const [loadingSettingsPanchayats, setLoadingSettingsPanchayats] = useState(false);
+  const [panchayatModalOpen, setPanchayatModalOpen] = useState(false);
+  const [selectedPanchayat, setSelectedPanchayat] = useState(null);
+  const [panchayatFormName, setPanchayatFormName] = useState('');
+  const [panchayatFormDistrict, setPanchayatFormDistrict] = useState('');
+  const [panchayatFormPinCode, setPanchayatFormPinCode] = useState('');
+  const [panchayatFormEmail, setPanchayatFormEmail] = useState('');
+  const [panchayatFormCode, setPanchayatFormCode] = useState('');
+
+  // Settings form states
+  const [settingsProfileName, setSettingsProfileName] = useState('');
+  const [settingsProfileEmail, setSettingsProfileEmail] = useState('');
+  const [settingsProfileMobile, setSettingsProfileMobile] = useState('');
+  
+  const [settingsCurrentPassword, setSettingsCurrentPassword] = useState('');
+  const [settingsNewPassword, setSettingsNewPassword] = useState('');
+  const [settingsConfirmPassword, setSettingsConfirmPassword] = useState('');
+
+  const [settingsDepartments, setSettingsDepartments] = useState([
+    'Public Works Department (PWD)',
+    'Sanitation Department',
+    'Water Authority',
+    'Sewerage & Drainage Board',
+    'Electricity & Street Light Section',
+    'State Power Corporation',
+    'Local Police Department',
+    'Traffic Police Section',
+    'Health & Environment Department',
+    'General Panchayat Administration'
+  ]);
+  const [newDeptName, setNewDeptName] = useState('');
+
+  const [settingsNotifications, setSettingsNotifications] = useState({
+    emailAlerts: true,
+    pushAlerts: true,
+    sseRealtime: true,
+    weeklyReports: false
+  });
+
+  const [settingsSystem, setSettingsSystem] = useState({
+    language: 'English',
+    theme: 'Light',
+    maintenanceMode: false
+  });
+
+  useEffect(() => {
+    if (user) {
+      setSettingsProfileName(user.fullName || '');
+      setSettingsProfileEmail(user.email || '');
+      setSettingsProfileMobile(user.mobile || '');
+    }
+  }, [user]);
   const [paDistrictFilter, setPaDistrictFilter] = useState('');
   const [paPanchayatFilter, setPaPanchayatFilter] = useState('');
   const [paStatusFilter, setPaStatusFilter] = useState('');
@@ -276,6 +339,12 @@ export default function AdminDashboard() {
     } else if (hash === '#admin/panchayat-admins') {
       setViewingComplaintId(null);
       setActiveTab('panchayat_admins');
+    } else if (hash === '#admin/analytics') {
+      setViewingComplaintId(null);
+      setActiveTab('analytics');
+    } else if (hash === '#admin/settings') {
+      setViewingComplaintId(null);
+      setActiveTab('settings');
     } else {
       setViewingComplaintId(null);
       setActiveTab('dashboard');
@@ -348,6 +417,154 @@ export default function AdminDashboard() {
       setError(err.message || 'Failed to establish database synchronization with Panchayat Server.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchAnalyticsData = async (start = analyticsStartDate, end = analyticsEndDate) => {
+    setLoadingAnalytics(true);
+    try {
+      let url = '/admin/stats';
+      const params = [];
+      if (start) params.push(`startDate=${encodeURIComponent(start)}`);
+      if (end) params.push(`endDate=${encodeURIComponent(end)}`);
+      if (params.length > 0) {
+        url += `?${params.join('&')}`;
+      }
+      const res = await api.get(url);
+      if (res.data?.success) {
+        setAnalyticsData(res.data);
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to fetch analytics data:', err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const fetchSettingsPanchayats = async () => {
+    setLoadingSettingsPanchayats(true);
+    try {
+      const res = await api.get('/admin/panchayats');
+      if (res.data?.success) {
+        setSettingsPanchayats(res.data.panchayats || []);
+      }
+    } catch (err) {
+      console.error('[DEV ERROR] Failed to fetch settings panchayats:', err);
+      showToast('Failed to load Panchayaths.', 'error');
+    } finally {
+      setLoadingSettingsPanchayats(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (!settingsProfileName || !settingsProfileEmail) {
+      showToast('Name and Email are required.', 'error');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to update your profile details?')) return;
+    try {
+      const res = await api.put('/profile', {
+        fullName: settingsProfileName,
+        email: settingsProfileEmail,
+        mobile: settingsProfileMobile
+      });
+      if (res.data?.success) {
+        showToast('Profile details updated successfully.');
+        // If there's a user context refresh mechanism, call it or reload
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update profile.', 'error');
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!settingsCurrentPassword || !settingsNewPassword || !settingsConfirmPassword) {
+      showToast('All password fields are required.', 'error');
+      return;
+    }
+    if (settingsNewPassword !== settingsConfirmPassword) {
+      showToast('New passwords do not match.', 'error');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to change your password?')) return;
+    try {
+      const res = await api.put('/profile/change-password', {
+        currentPassword: settingsCurrentPassword,
+        newPassword: settingsNewPassword
+      });
+      if (res.data?.success) {
+        showToast('Password changed successfully.');
+        setSettingsCurrentPassword('');
+        setSettingsNewPassword('');
+        setSettingsConfirmPassword('');
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to change password.', 'error');
+    }
+  };
+
+  const handleOpenPanchayatModal = (panchayat = null) => {
+    setSelectedPanchayat(panchayat);
+    if (panchayat) {
+      setPanchayatFormName(panchayat.name || '');
+      setPanchayatFormDistrict(panchayat.district || '');
+      setPanchayatFormPinCode(panchayat.pinCode || '');
+      setPanchayatFormEmail(panchayat.email || '');
+      setPanchayatFormCode(panchayat.panchayatCode || '');
+    } else {
+      setPanchayatFormName('');
+      setPanchayatFormDistrict('');
+      setPanchayatFormPinCode('');
+      setPanchayatFormEmail('');
+      setPanchayatFormCode('');
+    }
+    setPanchayatModalOpen(true);
+  };
+
+  const handleSavePanchayat = async (e) => {
+    e.preventDefault();
+    if (!panchayatFormName || !panchayatFormDistrict) {
+      showToast('Panchayath Name and District are required.', 'error');
+      return;
+    }
+    try {
+      const payload = {
+        name: panchayatFormName,
+        district: panchayatFormDistrict,
+        pinCode: panchayatFormPinCode,
+        email: panchayatFormEmail,
+        panchayatCode: panchayatFormCode
+      };
+
+      let res;
+      if (selectedPanchayat) {
+        res = await api.put(`/admin/panchayats/${selectedPanchayat._id}`, payload);
+      } else {
+        res = await api.post('/admin/panchayats', payload);
+      }
+
+      if (res.data?.success) {
+        showToast(selectedPanchayat ? 'Panchayath updated successfully.' : 'Panchayath created successfully.');
+        setPanchayatModalOpen(false);
+        fetchSettingsPanchayats();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to save Panchayath.', 'error');
+    }
+  };
+
+  const handleDeletePanchayat = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this Panchayath? This action cannot be undone.')) return;
+    try {
+      const res = await api.delete(`/admin/panchayats/${id}`);
+      if (res.data?.success) {
+        showToast('Panchayath deleted successfully.');
+        fetchSettingsPanchayats();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete Panchayath.', 'error');
     }
   };
 
@@ -869,6 +1086,12 @@ export default function AdminDashboard() {
     if (activeTab === 'panchayat_admins') {
       fetchPanchayatAdmins();
     }
+    if (activeTab === 'analytics') {
+      fetchAnalyticsData();
+    }
+    if (activeTab === 'settings') {
+      fetchSettingsPanchayats();
+    }
   }, [activeTab]);
 
   const handleToggleNotifications = () => {
@@ -1335,6 +1558,7 @@ export default function AdminDashboard() {
       if (res.data && res.data.success) {
         setDetailsComplaint(res.data.complaint);
         fetchComplaintDetails(detailsComplaint._id);
+        fetchData();
         showToast(`Complaint status updated to ${nextStatus}`, 'success');
       }
     } catch (err) {
@@ -1362,6 +1586,7 @@ export default function AdminDashboard() {
       if (res.data && res.data.success) {
         setDetailsComplaint(res.data.complaint);
         fetchComplaintDetails(detailsComplaint._id);
+        fetchData();
         showToast('Department assigned successfully.', 'success');
       }
     } catch (err) {
@@ -1382,6 +1607,7 @@ export default function AdminDashboard() {
       if (res.data && res.data.success) {
         setDetailsComplaint(res.data.complaint);
         setIsEditingNote(false);
+        fetchData();
         showToast('Administrative details saved successfully.', 'success');
       }
     } catch (err) {
@@ -1777,11 +2003,17 @@ export default function AdminDashboard() {
             <ShieldCheck size={18} />
             <span>Add Local Admin</span>
           </button>
-          <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
+          <button
+            className={`sidebar-item ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/analytics'; setActiveTab('analytics'); }}
+          >
             <TrendingUp size={18} />
             <span>Analytics</span>
           </button>
-          <button className="sidebar-item" style={{ cursor: 'not-allowed', opacity: 0.8 }}>
+          <button
+            className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/settings'; setActiveTab('settings'); }}
+          >
             <SettingsIcon size={18} />
             <span>Settings</span>
           </button>
@@ -2983,8 +3215,773 @@ export default function AdminDashboard() {
 
 
         {/* ==========================================
+            VIEW: SETTINGS PAGE
+            ========================================== */}
+        {activeTab === 'settings' && (() => {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Settings & System Config</h1>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Configure admin access, manage Panchayaths, departments, and notification preferences</p>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '30px', alignItems: 'flex-start' }}>
+                {/* Left Navigation pane */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '12px' }}>
+                  {[
+                    { key: 'profile', label: 'Admin Profile' },
+                    { key: 'security', label: 'Account & Security' },
+                    { key: 'roles', label: 'User & Role Management' },
+                    { key: 'panchayats', label: 'Panchayath Management' },
+                    { key: 'departments', label: 'Department Management' },
+                    { key: 'notifications', label: 'Notification Settings' },
+                    { key: 'system', label: 'System Preferences' }
+                  ].map(sec => (
+                    <button
+                      key={sec.key}
+                      onClick={() => setSettingsActiveSection(sec.key)}
+                      style={{
+                        padding: '10px 16px',
+                        textAlign: 'left',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        background: settingsActiveSection === sec.key ? 'var(--primary-light)' : 'transparent',
+                        color: settingsActiveSection === sec.key ? 'var(--primary)' : '#4b5563'
+                      }}
+                    >
+                      {sec.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Right detail configuration pane */}
+                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px', minHeight: '400px' }}>
+                  
+                  {/* Admin Profile Section */}
+                  {settingsActiveSection === 'profile' && (
+                    <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Admin Profile</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Edit your public dashboard name and login identification</p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Full Name *</label>
+                          <input
+                            type="text"
+                            required
+                            value={settingsProfileName}
+                            onChange={(e) => setSettingsProfileName(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Email Address *</label>
+                          <input
+                            type="email"
+                            required
+                            value={settingsProfileEmail}
+                            onChange={(e) => setSettingsProfileEmail(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Mobile Number</label>
+                          <input
+                            type="text"
+                            value={settingsProfileMobile}
+                            onChange={(e) => setSettingsProfileMobile(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '16px', borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                        <button type="submit" className="admin-btn primary">Save Changes</button>
+                        <button type="button" className="admin-btn secondary" onClick={() => {
+                          setSettingsProfileName(user?.fullName || '');
+                          setSettingsProfileEmail(user?.email || '');
+                          setSettingsProfileMobile(user?.mobile || '');
+                        }}>Reset</button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Account & Security Section */}
+                  {settingsActiveSection === 'security' && (
+                    <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Account Security</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure high-security access passwords for safety</p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Current Password *</label>
+                          <input
+                            type="password"
+                            required
+                            placeholder="••••••••"
+                            value={settingsCurrentPassword}
+                            onChange={(e) => setSettingsCurrentPassword(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>New Password *</label>
+                          <input
+                            type="password"
+                            required
+                            placeholder="••••••••"
+                            value={settingsNewPassword}
+                            onChange={(e) => setSettingsNewPassword(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Confirm New Password *</label>
+                          <input
+                            type="password"
+                            required
+                            placeholder="••••••••"
+                            value={settingsConfirmPassword}
+                            onChange={(e) => setSettingsConfirmPassword(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '16px', borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                        <button type="submit" className="admin-btn primary">Change Password</button>
+                        <button type="button" className="admin-btn secondary" onClick={() => {
+                          setSettingsCurrentPassword('');
+                          setSettingsNewPassword('');
+                          setSettingsConfirmPassword('');
+                        }}>Reset</button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* User & Role Management */}
+                  {settingsActiveSection === 'roles' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>User & Role Management</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure core roles and system access permissions</p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {[
+                          { role: 'Citizen', permissions: ['Submit complaints', 'Read announcements', 'Join Community Hub'] },
+                          { role: 'Panchayat Admin', permissions: ['Manage assigned complaints', 'Publish announcements', 'Read citizens'] },
+                          { role: 'Main Admin (You)', permissions: ['Full system config', 'Manage Panchayat Admins', 'Oversee routing configurations'] }
+                        ].map((r, idx) => (
+                          <div key={idx} style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', display: 'block', marginBottom: '8px' }}>{r.role}</span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {r.permissions.map((p, i) => (
+                                <span key={i} style={{ fontSize: '0.72rem', background: '#e2e8f0', color: '#475569', padding: '4px 10px', borderRadius: '99px', fontWeight: 600 }}>
+                                  ✓ {p}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Panchayath Management */}
+                  {settingsActiveSection === 'panchayats' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Panchayath Management</h3>
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>Configure local bodies and registration zones</p>
+                        </div>
+                        <button className="admin-btn primary" onClick={() => handleOpenPanchayatModal(null)} style={{ gap: '6px', padding: '8px 16px' }}>
+                          <Plus size={16} /> Add Panchayath
+                        </button>
+                      </div>
+
+                      {loadingSettingsPanchayats ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}>
+                          <span style={{ width: '24px', height: '24px', border: '2px solid #3b82f6', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+                        </div>
+                      ) : settingsPanchayats.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>No Panchayaths configured.</div>
+                      ) : (
+                        <div className="table-responsive-wrapper">
+                          <table className="complaints-table">
+                            <thead>
+                              <tr>
+                                <th>Name</th>
+                                <th>District</th>
+                                <th>Code</th>
+                                <th>Email</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {settingsPanchayats.map(p => (
+                                <tr key={p._id}>
+                                  <td style={{ fontWeight: 700, color: '#1e293b' }}>{p.name}</td>
+                                  <td>{p.district}</td>
+                                  <td>{p.panchayatCode || '—'}</td>
+                                  <td>{p.email || '—'}</td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                      <button className="admin-btn secondary" onClick={() => handleOpenPanchayatModal(p)} style={{ padding: '4px 8px', fontSize: '0.7rem' }}>Edit</button>
+                                      <button className="admin-btn secondary" onClick={() => handleDeletePanchayat(p._id)} style={{ padding: '4px 8px', fontSize: '0.7rem', color: '#ef4444' }}>Delete</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Department Management */}
+                  {settingsActiveSection === 'departments' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Department Management</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure grievance routing departments</p>
+
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!newDeptName) return;
+                        if (settingsDepartments.includes(newDeptName)) {
+                          showToast('Department already exists.', 'error');
+                          return;
+                        }
+                        setSettingsDepartments([...settingsDepartments, newDeptName]);
+                        setNewDeptName('');
+                        showToast('Department added to workspace configuration.');
+                      }} style={{ display: 'flex', gap: '8px', maxWidth: '480px' }}>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Forest & Wildlife Department"
+                          value={newDeptName}
+                          onChange={(e) => setNewDeptName(e.target.value)}
+                          className="complaints-search-input"
+                          style={{ flex: 1, border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                        />
+                        <button type="submit" className="admin-btn primary">Add</button>
+                      </form>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                        {settingsDepartments.map((dept, idx) => (
+                          <div key={idx} style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>{dept}</span>
+                            <button className="admin-btn secondary" onClick={() => {
+                              if (!window.confirm(`Are you sure you want to remove ${dept}?`)) return;
+                              setSettingsDepartments(settingsDepartments.filter(d => d !== dept));
+                              showToast('Department configuration updated.');
+                            }} style={{ padding: '4px 8px', fontSize: '0.7rem', color: '#ef4444' }}>Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notification Settings */}
+                  {settingsActiveSection === 'notifications' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Notification Settings</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure communication alerts and delivery frequencies</p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
+                        {[
+                          { key: 'emailAlerts', label: 'Email Notifications', desc: 'Deliver urgent logs alerts straight to admin mailbox' },
+                          { key: 'pushAlerts', label: 'Push Notifications', desc: 'Show visual alerts in the browser workspace' },
+                          { key: 'sseRealtime', label: 'SSE Realtime Broadcast', desc: 'Enable live WebSocket and SSE stream parameters' },
+                          { key: 'weeklyReports', label: 'Weekly Summary PDF', desc: 'Auto-generate and email analytics reports weekly' }
+                        ].map(n => (
+                          <div key={n.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '14px 16px', borderRadius: '12px', border: '1px solid #edf2f7' }}>
+                            <div>
+                              <span style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155' }}>{n.label}</span>
+                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{n.desc}</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={settingsNotifications[n.key]}
+                              onChange={(e) => {
+                                setSettingsNotifications({
+                                  ...settingsNotifications,
+                                  [n.key]: e.target.checked
+                                });
+                                showToast('Notification preference updated.');
+                              }}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* System Preferences */}
+                  {settingsActiveSection === 'system' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>System Preferences</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure dashboard preferences and active languages</p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Active Language</label>
+                          <select
+                            value={settingsSystem.language}
+                            onChange={(e) => {
+                              setSettingsSystem({ ...settingsSystem, language: e.target.value });
+                              showToast('System language setting updated.');
+                            }}
+                            className="admin-select"
+                            style={{ border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                          >
+                            <option value="English">English</option>
+                            <option value="Malayalam">Malayalam</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Theme Selection</label>
+                          <select
+                            value={settingsSystem.theme}
+                            onChange={(e) => {
+                              setSettingsSystem({ ...settingsSystem, theme: e.target.value });
+                              showToast('Theme selector updated.');
+                            }}
+                            className="admin-select"
+                            style={{ border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                          >
+                            <option value="Light">Light Mode</option>
+                            <option value="Dark">Dark Mode</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff0f0', padding: '14px 16px', borderRadius: '12px', border: '1px solid #fecaca', marginTop: '12px' }}>
+                          <div>
+                            <span style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#991b1b' }}>Maintenance Mode</span>
+                            <span style={{ fontSize: '0.72rem', color: '#b91c1c' }}>Locks citizen logins for schema migrations and updates</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={settingsSystem.maintenanceMode}
+                            onChange={(e) => {
+                              if (!window.confirm('WARNING: Activating maintenance mode will lock citizen access. Continue?')) return;
+                              setSettingsSystem({ ...settingsSystem, maintenanceMode: e.target.checked });
+                              showToast('System maintenance mode changed.');
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
+              {/* Panchayat CRUD Add/Edit Modal */}
+              {panchayatModalOpen && (
+                <div className="admin-modal-overlay" style={{ zIndex: 1200 }}>
+                  <div className="admin-modal-container" style={{ maxWidth: '540px', padding: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #edf2f7', paddingBottom: '12px' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>
+                        {selectedPanchayat ? 'Edit Panchayath Details' : 'Configure New Panchayath'}
+                      </h3>
+                      <button onClick={() => setPanchayatModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSavePanchayat} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Panchayath Name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Kanjirappally Panchayat"
+                          value={panchayatFormName}
+                          onChange={(e) => setPanchayatFormName(e.target.value)}
+                          className="complaints-search-input"
+                          style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>District *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Kottayam"
+                            value={panchayatFormDistrict}
+                            onChange={(e) => setPanchayatFormDistrict(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Panchayath Code</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. KTP-PANCH"
+                            value={panchayatFormCode}
+                            onChange={(e) => setPanchayatFormCode(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>PIN Code</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 686507"
+                            value={panchayatFormPinCode}
+                            onChange={(e) => setPanchayatFormPinCode(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Contact Email</label>
+                          <input
+                            type="email"
+                            placeholder="e.g. contact@kanjirappally.in"
+                            value={panchayatFormEmail}
+                            onChange={(e) => setPanchayatFormEmail(e.target.value)}
+                            className="complaints-search-input"
+                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                        <button type="button" className="admin-btn secondary" onClick={() => setPanchayatModalOpen(false)}>Cancel</button>
+                        <button type="submit" className="admin-btn primary">
+                          {selectedPanchayat ? 'Update Details' : 'Configure Panchayath'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ==========================================
             VIEW A: DASHBOARD HOME
             ========================================== */}
+        {/* ==========================================
+            VIEW: ANALYTICS DASHBOARD
+            ========================================== */}
+        {activeTab === 'analytics' && (() => {
+          const statsObj = analyticsData?.stats || {};
+          const chartsObj = analyticsData?.charts || {};
+          const panchayatsList = chartsObj.panchayatPerformance || [];
+          
+          const filteredPanchayats = panchayatsList.filter(p => 
+            p.panchayat.toLowerCase().includes(panchayatSearch.toLowerCase())
+          );
+
+          const resolutionRate = statsObj.total > 0 
+            ? Math.round((statsObj.resolved / statsObj.total) * 100) 
+            : 0;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Header and Toolbar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Analytics & Reports</h1>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Real-time civic performance metrics, trends, and panchayat analytics</p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>From:</label>
+                    <input
+                      type="date"
+                      value={analyticsStartDate}
+                      onChange={(e) => setAnalyticsStartDate(e.target.value)}
+                      className="complaints-search-input"
+                      style={{ padding: '6px 10px', fontSize: '0.82rem', border: '1px solid #cbd5e1', borderRadius: '8px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>To:</label>
+                    <input
+                      type="date"
+                      value={analyticsEndDate}
+                      onChange={(e) => setAnalyticsEndDate(e.target.value)}
+                      className="complaints-search-input"
+                      style={{ padding: '6px 10px', fontSize: '0.82rem', border: '1px solid #cbd5e1', borderRadius: '8px' }}
+                    />
+                  </div>
+                  <button className="admin-btn primary" onClick={() => fetchAnalyticsData()} style={{ gap: '6px', padding: '8px 16px' }}>
+                    Filter
+                  </button>
+                  <button className="admin-btn secondary" onClick={() => { setAnalyticsStartDate(''); setAnalyticsEndDate(''); fetchAnalyticsData('', ''); }} style={{ gap: '6px', padding: '8px 16px' }}>
+                    Reset
+                  </button>
+                  <button className="admin-btn secondary" onClick={() => fetchAnalyticsData()} style={{ gap: '6px', padding: '8px 16px' }}>
+                    <RefreshCw size={14} className={loadingAnalytics ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </div>
+
+              {loadingAnalytics ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
+                  <span style={{ width: '36px', height: '36px', border: '3px solid #3b82f6', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                    <div className="stat-card">
+                      <span className="stat-accent" style={{ background: '#3b82f6' }} />
+                      <div className="stat-info">
+                        <span className="stat-number">{statsObj.total || 0}</span>
+                        <span className="stat-label">Total Complaints</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-accent" style={{ background: '#10b981' }} />
+                      <div className="stat-info">
+                        <span className="stat-number">{statsObj.resolved || 0}</span>
+                        <span className="stat-label">Resolved Complaints</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-accent" style={{ background: '#f59e0b' }} />
+                      <div className="stat-info">
+                        <span className="stat-number">{statsObj.pending || 0}</span>
+                        <span className="stat-label">Pending Complaints</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-accent" style={{ background: '#8b5cf6' }} />
+                      <div className="stat-info">
+                        <span className="stat-number">{resolutionRate}%</span>
+                        <span className="stat-label">Resolution Rate</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-accent" style={{ background: '#ec4899' }} />
+                      <div className="stat-info">
+                        <span className="stat-number">{statsObj.totalCitizens || 0}</span>
+                        <span className="stat-label">Total Citizens</span>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-accent" style={{ background: '#14b8a6' }} />
+                      <div className="stat-info">
+                        <span className="stat-number">{statsObj.activeUsers || 0}</span>
+                        <span className="stat-label">Active Users</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Main Grid for Visual Charts */}
+                  <div className="dashboard-grid-2col" style={{ gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
+                    
+                    {/* Left Column: Monthly Trends & Department performance */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      
+                      {/* Monthly Complaint Trends Chart */}
+                      <div className="chart-card">
+                        <div className="chart-title-container">
+                          <span className="chart-title">Monthly Complaint Trends</span>
+                        </div>
+                        <div style={{ display: 'flex', height: '180px', alignItems: 'flex-end', justifyContent: 'space-around', padding: '16px 8px 8px', borderBottom: '1px solid #e2e8f0' }}>
+                          {(chartsObj.monthlyTrends || []).map((t, idx) => {
+                            const maxVal = Math.max(...(chartsObj.monthlyTrends || []).map(m => m.count), 1);
+                            const heightPct = (t.count / maxVal) * 100;
+                            return (
+                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '8px', height: '100%', justifyContent: 'flex-end' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary)' }}>{t.count}</span>
+                                <div style={{ width: '28px', height: `${heightPct}%`, background: 'linear-gradient(180deg, var(--primary) 0%, var(--primary-light) 100%)', borderRadius: '6px 6px 0 0', minHeight: '4px', transition: 'height 0.3s ease' }} />
+                                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{t.month}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Department performance SLA */}
+                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
+                        <h3 style={{ margin: '0 0 16px', fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Performance by Department</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '320px', overflowY: 'auto' }}>
+                          {(chartsObj.departmentPerformance || []).slice(0, 5).map((dept, idx) => (
+                            <div key={idx} style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #edf2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>{dept.department}</span>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Assigned: {dept.total} | Resolved: {dept.resolved}</span>
+                              </div>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: dept.successRate > 75 ? '#10b981' : dept.successRate > 40 ? '#f59e0b' : '#ef4444' }}>
+                                {dept.successRate}% SLA
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Status distribution, category metrics & priority */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      
+                      {/* Complaints by Status & Priority */}
+                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Status Distribution</h3>
+                        <div style={{ display: 'flex', gap: '8px', height: '16px', borderRadius: '8px', overflow: 'hidden' }}>
+                          {[
+                            { label: 'Pending', count: statsObj.pending || 0, color: '#ef4444' },
+                            { label: 'Verified', count: statsObj.verified || 0, color: '#3b82f6' },
+                            { label: 'In Progress', count: statsObj.inProgress || 0, color: '#f59e0b' },
+                            { label: 'Resolved', count: statsObj.resolved || 0, color: '#10b981' }
+                          ].map((s, idx) => {
+                            const pct = statsObj.total > 0 ? (s.count / statsObj.total) * 100 : 0;
+                            if (pct === 0) return null;
+                            return (
+                              <div key={idx} style={{ width: `${pct}%`, background: s.color, height: '100%' }} title={`${s.label}: ${s.count}`} />
+                            );
+                          })}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {[
+                            { label: 'Pending', count: statsObj.pending || 0, color: '#ef4444' },
+                            { label: 'Verified', count: statsObj.verified || 0, color: '#3b82f6' },
+                            { label: 'In Progress', count: statsObj.inProgress || 0, color: '#f59e0b' },
+                            { label: 'Resolved', count: statsObj.resolved || 0, color: '#10b981' }
+                          ].map((s, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.color }} />
+                              <span>{s.label}: {s.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Priority Distribution */}
+                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
+                        <h3 style={{ margin: '0 0 12px', fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Priority Distribution</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {Object.entries(chartsObj.priorityDistribution || {}).map(([p, count], idx) => (
+                            <div key={idx} style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span className={`badge-priority ${p.toLowerCase()}`} style={{ fontSize: '0.68rem', padding: '3px 8px' }}>{p}</span>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>{count} Complaints</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Category Breakdown */}
+                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
+                        <h3 style={{ margin: '0 0 12px', fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Top Categories</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {(chartsObj.categoryDistribution || []).slice(0, 4).map((cat, idx) => {
+                            const maxVal = Math.max(...(chartsObj.categoryDistribution || []).map(c => c.count), 1);
+                            const pct = (cat.count / maxVal) * 100;
+                            return (
+                              <div key={idx}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#475569', fontWeight: 700, marginBottom: '2px' }}>
+                                  <span>{cat.category}</span>
+                                  <span>{cat.count}</span>
+                                </div>
+                                <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                                  <div style={{ width: `${pct}%`, background: 'var(--primary)', height: '100%', borderRadius: '3px' }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Panchayath-wise Comparison Section */}
+                  <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>Panchayath-wise Performance</h3>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#64748b' }}>Comparative resolution metrics mapped across local authorities</p>
+                      </div>
+                      <div className="search-input-wrapper" style={{ width: '260px' }}>
+                        <Search size={14} className="search-icon" style={{ top: '10px' }} />
+                        <input
+                          type="text"
+                          placeholder="Filter by Panchayath..."
+                          value={panchayatSearch}
+                          onChange={(e) => setPanchayatSearch(e.target.value)}
+                          className="complaints-search-input"
+                          style={{ paddingLeft: '32px', fontSize: '0.8rem', height: '34px' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="table-responsive-wrapper">
+                      <table className="complaints-table">
+                        <thead>
+                          <tr>
+                            <th>Panchayath</th>
+                            <th>Total Complaints</th>
+                            <th>Resolved</th>
+                            <th>Pending</th>
+                            <th>Resolution Rate</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredPanchayats.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: 'center', color: '#94a3b8', padding: '32px' }}>
+                                No Panchayaths found matching filter criteria.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredPanchayats.map((p, idx) => (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: 700, color: '#1e293b' }}>{p.panchayat}</td>
+                                <td style={{ fontWeight: 600 }}>{p.total}</td>
+                                <td style={{ color: '#10b981', fontWeight: 600 }}>{p.resolved}</td>
+                                <td style={{ color: '#ef4444', fontWeight: 600 }}>{p.pending}</td>
+                                <td>
+                                  <span style={{ fontWeight: 800, color: p.successRate > 75 ? '#10b981' : p.successRate > 40 ? '#f59e0b' : '#ef4444' }}>
+                                    {p.successRate}%
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
+
         {activeTab === 'dashboard' && (
           <div>
             <div className="admin-flex-row" style={{ marginBottom: '8px' }}>

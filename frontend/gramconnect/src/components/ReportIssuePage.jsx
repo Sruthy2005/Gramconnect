@@ -216,6 +216,16 @@ export default function ReportIssuePage({ onNavigate }) {
     if (finalLocalBody) {
       setLocalBody(finalLocalBody);
       setLocalBodySearch(finalLocalBody);
+      const lbLower = finalLocalBody.toLowerCase();
+      if (lbLower.includes('corporation')) {
+        setLocalBodyType('Corporation');
+      } else if (lbLower.includes('municipality')) {
+        setLocalBodyType('Municipality');
+      } else {
+        setLocalBodyType('Grama Panchayat');
+      }
+      if (errors.localBody) setErrors(prev => ({ ...prev, localBody: '' }));
+      if (errors.localBodyType) setErrors(prev => ({ ...prev, localBodyType: '' }));
     }
 
     // 6. Extract City/Village (Fallback Chain: Village -> Hamlet -> City -> Town -> Municipality -> Suburb)
@@ -301,6 +311,9 @@ export default function ReportIssuePage({ onNavigate }) {
   const [ward, setWard] = useState('');
   const [landmark, setLandmark] = useState('');
   const [pincode, setPincode] = useState('');
+  const [localBodyType, setLocalBodyType] = useState('');
+  const [priority, setPriority] = useState('Normal');
+  const [errors, setErrors] = useState({});
 
   // Location Geolocation fields
   const [latitude, setLatitude] = useState('');
@@ -362,6 +375,7 @@ export default function ReportIssuePage({ onNavigate }) {
     const updateCoords = async (lat, lng) => {
       setLatitude(lat.toFixed(6));
       setLongitude(lng.toFixed(6));
+      setErrors(prev => ({ ...prev, latitude: '', longitude: '' }));
 
       // Reverse geocode via Nominatim API to get Full Address
       try {
@@ -463,6 +477,7 @@ export default function ReportIssuePage({ onNavigate }) {
         const lng = position.coords.longitude;
         setLatitude(lat.toFixed(6));
         setLongitude(lng.toFixed(6));
+        setErrors(prev => ({ ...prev, latitude: '', longitude: '' }));
 
         // Fetch address for current location and autofill (Requirement 4)
         fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
@@ -529,16 +544,49 @@ export default function ReportIssuePage({ onNavigate }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!title.trim() || !description.trim() || !category || !state.trim() || !district.trim() || !taluk.trim() || !localBody.trim() || !city.trim() || !pincode.trim()) {
-      showToast('Please fill in all required fields.', 'error');
+    const newErrors = {};
+    if (!title.trim()) newErrors.title = 'Title is required';
+    if (!category) newErrors.category = 'Category is required';
+    if (!description.trim()) {
+      newErrors.description = 'Description is required';
+    } else if (description.trim().length < 20) {
+      newErrors.description = 'Description must be at least 20 characters long';
+    }
+    if (!state.trim()) newErrors.state = 'State is required';
+    if (!district.trim()) newErrors.district = 'District is required';
+    if (!taluk.trim()) newErrors.taluk = 'Taluk is required';
+    if (!localBodyType) newErrors.localBodyType = 'Local Body Type is required';
+    if (!localBody.trim()) newErrors.localBody = 'Local Body is required';
+    if (!city.trim()) newErrors.city = 'City/Village is required';
+    if (!pincode.trim()) {
+      newErrors.pincode = 'PIN Code is required';
+    } else if (!/^\d{6}$/.test(pincode.trim())) {
+      newErrors.pincode = 'PIN Code must be a 6-digit number';
+    }
+    if (!latitude) {
+      newErrors.latitude = 'Latitude is required';
+    } else if (isNaN(parseFloat(latitude))) {
+      newErrors.latitude = 'Latitude must be a valid number';
+    }
+    if (!longitude) {
+      newErrors.longitude = 'Longitude is required';
+    } else if (isNaN(parseFloat(longitude))) {
+      newErrors.longitude = 'Longitude must be a valid number';
+    }
+    if (!priority) newErrors.priority = 'Priority is required';
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showToast('Please correct the validation errors below.', 'error');
+      const firstErrorField = Object.keys(newErrors)[0];
+      const element = document.getElementById(`issue-${firstErrorField}`) || document.getElementById(`loc-${firstErrorField}`) || document.getElementById(`gps-${firstErrorField}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
-    if (description.trim().length < 20) {
-      showToast('Description must be at least 20 characters long.', 'error');
-      return;
-    }
-
+    setErrors({});
     setFormSubmitting(true);
 
     // Build multipart/form-data payload (Requirement 13)
@@ -548,6 +596,9 @@ export default function ReportIssuePage({ onNavigate }) {
     formData.append('category', category);
     formData.append('state', state.trim());
     formData.append('district', district.trim());
+    formData.append('taluk', taluk.trim());
+    formData.append('localBody', localBody.trim());
+    formData.append('localBodyType', localBodyType);
     const formattedCity = `${city.trim()} (${localBody.trim()}, ${taluk.trim()} Taluk)`;
     formData.append('city', formattedCity);
     formData.append('ward', ward.trim());
@@ -556,6 +607,7 @@ export default function ReportIssuePage({ onNavigate }) {
     formData.append('latitude', latitude);
     formData.append('longitude', longitude);
     formData.append('anonymous', anonymous);
+    formData.append('priority', priority);
     formData.append('urgent', urgent);
 
     images.forEach((file) => {
@@ -579,6 +631,8 @@ export default function ReportIssuePage({ onNavigate }) {
         setTalukSearch('');
         setLocalBody('');
         setLocalBodySearch('');
+        setLocalBodyType('');
+        setPriority('Normal');
         setCity('');
         setWard('');
         setLandmark('');
@@ -589,6 +643,7 @@ export default function ReportIssuePage({ onNavigate }) {
         setImagePreviews([]);
         setAnonymous(false);
         setUrgent(false);
+        setErrors({});
 
         // Redirect to My Complaints Page after 1.5 seconds
         setTimeout(() => {
@@ -633,10 +688,18 @@ export default function ReportIssuePage({ onNavigate }) {
               id="issue-title"
               className="report-input"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (errors.title) setErrors(prev => ({ ...prev, title: '' }));
+              }}
               placeholder="Brief summary of the issue"
               required
             />
+            {errors.title && (
+              <span className="form-error-inline">
+                <AlertTriangle size={12} /> {errors.title}
+              </span>
+            )}
           </div>
 
           <div className="input-field-group">
@@ -645,7 +708,10 @@ export default function ReportIssuePage({ onNavigate }) {
               id="issue-category"
               className="report-input select"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                if (errors.category) setErrors(prev => ({ ...prev, category: '' }));
+              }}
               required
             >
               <option value="">Select Category</option>
@@ -653,6 +719,11 @@ export default function ReportIssuePage({ onNavigate }) {
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
+            {errors.category && (
+              <span className="form-error-inline">
+                <AlertTriangle size={12} /> {errors.category}
+              </span>
+            )}
           </div>
 
           <div className="input-field-group">
@@ -661,15 +732,24 @@ export default function ReportIssuePage({ onNavigate }) {
               id="issue-description"
               className="report-textarea"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                if (errors.description) setErrors(prev => ({ ...prev, description: '' }));
+              }}
               placeholder="Describe the issue in detail (minimum 20 characters)"
               rows={4}
               required
             />
-            {description.length > 0 && description.length < 20 && (
+            {errors.description ? (
               <span className="form-error-inline">
-                <AlertTriangle size={12} /> Minimum 20 characters required. (Current: {description.length})
+                <AlertTriangle size={12} /> {errors.description}
               </span>
+            ) : (
+              description.length > 0 && description.length < 20 && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> Minimum 20 characters required. (Current: {description.length})
+                </span>
+              )
             )}
           </div>
 
@@ -684,9 +764,17 @@ export default function ReportIssuePage({ onNavigate }) {
                 id="loc-state"
                 className="report-input"
                 value={state}
-                onChange={(e) => setState(e.target.value)}
+                onChange={(e) => {
+                  setState(e.target.value);
+                  if (errors.state) setErrors(prev => ({ ...prev, state: '' }));
+                }}
                 required
               />
+              {errors.state && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.state}
+                </span>
+              )}
             </div>
             <div className="input-field-group" style={{ position: 'relative' }}>
               <label className="input-label" htmlFor="loc-district">District <span className="req">*</span></label>
@@ -703,6 +791,8 @@ export default function ReportIssuePage({ onNavigate }) {
                   setTalukSearch('');
                   setLocalBody('');
                   setLocalBodySearch('');
+                  setLocalBodyType('');
+                  if (errors.district) setErrors(prev => ({ ...prev, district: '' }));
                 }}
                 onFocus={() => {
                   setDistrictDropdownOpen(true);
@@ -723,6 +813,11 @@ export default function ReportIssuePage({ onNavigate }) {
                 autoComplete="off"
                 required
               />
+              {errors.district && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.district}
+                </span>
+              )}
               {districtDropdownOpen && (
                 <div
                   className="district-dropdown-menu"
@@ -754,6 +849,8 @@ export default function ReportIssuePage({ onNavigate }) {
                           setTalukSearch('');
                           setLocalBody('');
                           setLocalBodySearch('');
+                          setLocalBodyType('');
+                          if (errors.district) setErrors(prev => ({ ...prev, district: '' }));
                         }}
                         style={{
                           padding: '8px 12px',
@@ -799,6 +896,8 @@ export default function ReportIssuePage({ onNavigate }) {
                   setTalukDropdownOpen(true);
                   setLocalBody('');
                   setLocalBodySearch('');
+                  setLocalBodyType('');
+                  if (errors.taluk) setErrors(prev => ({ ...prev, taluk: '' }));
                 }}
                 onFocus={() => {
                   if (district) setTalukDropdownOpen(true);
@@ -821,6 +920,11 @@ export default function ReportIssuePage({ onNavigate }) {
                 disabled={!district}
                 required
               />
+              {errors.taluk && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.taluk}
+                </span>
+              )}
               {district && locationData[district] && talukDropdownOpen && (
                 <div
                   className="district-dropdown-menu"
@@ -850,6 +954,8 @@ export default function ReportIssuePage({ onNavigate }) {
                           setTalukDropdownOpen(false);
                           setLocalBody('');
                           setLocalBodySearch('');
+                          setLocalBodyType('');
+                          if (errors.taluk) setErrors(prev => ({ ...prev, taluk: '' }));
                         }}
                         style={{
                           padding: '8px 12px',
@@ -879,6 +985,33 @@ export default function ReportIssuePage({ onNavigate }) {
               )}
             </div>
 
+            {/* Local Body Type Dropdown */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="loc-localbodytype">Local Body Type <span className="req">*</span></label>
+              <select
+                id="loc-localbodytype"
+                className="report-input select"
+                value={localBodyType}
+                onChange={(e) => {
+                  setLocalBodyType(e.target.value);
+                  if (errors.localBodyType) setErrors(prev => ({ ...prev, localBodyType: '' }));
+                }}
+                required
+              >
+                <option value="">Select Local Body Type</option>
+                <option value="Grama Panchayat">Grama Panchayat</option>
+                <option value="Municipality">Municipality</option>
+                <option value="Corporation">Corporation</option>
+              </select>
+              {errors.localBodyType && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.localBodyType}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="form-row-2col">
             {/* Local Body Dropdown (Requirement 2 & 3) */}
             <div className="input-field-group" style={{ position: 'relative' }}>
               <label className="input-label" htmlFor="loc-localbody">Local Body <span className="req">*</span></label>
@@ -891,6 +1024,7 @@ export default function ReportIssuePage({ onNavigate }) {
                   setLocalBodySearch(e.target.value);
                   setLocalBody(e.target.value);
                   setLocalBodyDropdownOpen(true);
+                  if (errors.localBody) setErrors(prev => ({ ...prev, localBody: '' }));
                 }}
                 onFocus={() => {
                   if (taluk) setLocalBodyDropdownOpen(true);
@@ -902,6 +1036,13 @@ export default function ReportIssuePage({ onNavigate }) {
                     if (matched) {
                       setLocalBody(matched);
                       setLocalBodySearch(matched);
+                      if (matched.toLowerCase().includes('corporation')) {
+                        setLocalBodyType('Corporation');
+                      } else if (matched.toLowerCase().includes('municipality')) {
+                        setLocalBodyType('Municipality');
+                      } else {
+                        setLocalBodyType('Grama Panchayat');
+                      }
                     } else {
                       setLocalBody(localBodySearch);
                     }
@@ -913,6 +1054,11 @@ export default function ReportIssuePage({ onNavigate }) {
                 disabled={!taluk}
                 required
               />
+              {errors.localBody && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.localBody}
+                </span>
+              )}
               {district && taluk && locationData[district] && locationData[district].Taluks[taluk] && localBodyDropdownOpen && (
                 <div
                   className="district-dropdown-menu"
@@ -940,6 +1086,15 @@ export default function ReportIssuePage({ onNavigate }) {
                           setLocalBody(lb);
                           setLocalBodySearch(lb);
                           setLocalBodyDropdownOpen(false);
+                          if (lb.toLowerCase().includes('corporation')) {
+                            setLocalBodyType('Corporation');
+                          } else if (lb.toLowerCase().includes('municipality')) {
+                            setLocalBodyType('Municipality');
+                          } else {
+                            setLocalBodyType('Grama Panchayat');
+                          }
+                          if (errors.localBody) setErrors(prev => ({ ...prev, localBody: '' }));
+                          if (errors.localBodyType) setErrors(prev => ({ ...prev, localBodyType: '' }));
                         }}
                         style={{
                           padding: '8px 12px',
@@ -968,9 +1123,7 @@ export default function ReportIssuePage({ onNavigate }) {
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="form-row-2col">
             <div className="input-field-group">
               <label className="input-label" htmlFor="loc-city">City / Village <span className="req">*</span></label>
               <input
@@ -978,11 +1131,22 @@ export default function ReportIssuePage({ onNavigate }) {
                 id="loc-city"
                 className="report-input"
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(e) => {
+                  setCity(e.target.value);
+                  if (errors.city) setErrors(prev => ({ ...prev, city: '' }));
+                }}
                 placeholder="City/Village name"
                 required
               />
+              {errors.city && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.city}
+                </span>
+              )}
             </div>
+          </div>
+
+          <div className="form-row-2col">
             <div className="input-field-group">
               <label className="input-label" htmlFor="loc-pincode">PIN Code <span className="req">*</span></label>
               <input
@@ -990,10 +1154,44 @@ export default function ReportIssuePage({ onNavigate }) {
                 id="loc-pincode"
                 className="report-input"
                 value={pincode}
-                onChange={(e) => setPincode(e.target.value)}
+                onChange={(e) => {
+                  setPincode(e.target.value);
+                  if (errors.pincode) setErrors(prev => ({ ...prev, pincode: '' }));
+                }}
                 placeholder="6-digit postal code"
                 required
               />
+              {errors.pincode && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.pincode}
+                </span>
+              )}
+            </div>
+
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="issue-priority">Priority <span className="req">*</span></label>
+              <select
+                id="issue-priority"
+                className="report-input select"
+                value={priority}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPriority(val);
+                  setUrgent(val === 'Urgent');
+                  if (errors.priority) setErrors(prev => ({ ...prev, priority: '' }));
+                }}
+                required
+              >
+                <option value="Normal">Normal</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+              {errors.priority && (
+                <span className="form-error-inline">
+                  <AlertTriangle size={12} /> {errors.priority}
+                </span>
+              )}
             </div>
           </div>
 
@@ -1130,10 +1328,18 @@ export default function ReportIssuePage({ onNavigate }) {
                   id="gps-lat"
                   className="report-input"
                   value={latitude}
-                  onChange={(e) => setLatitude(e.target.value)}
+                  onChange={(e) => {
+                    setLatitude(e.target.value);
+                    if (errors.latitude) setErrors(prev => ({ ...prev, latitude: '' }));
+                  }}
                   placeholder="e.g. 10.8505"
                   required
                 />
+                {errors.latitude && (
+                  <span className="form-error-inline">
+                    <AlertTriangle size={12} /> {errors.latitude}
+                  </span>
+                )}
               </div>
               <div className="input-field-group">
                 <label className="input-label" htmlFor="gps-lng">Longitude <span className="req">*</span></label>
@@ -1143,10 +1349,18 @@ export default function ReportIssuePage({ onNavigate }) {
                   id="gps-lng"
                   className="report-input"
                   value={longitude}
-                  onChange={(e) => setLongitude(e.target.value)}
+                  onChange={(e) => {
+                    setLongitude(e.target.value);
+                    if (errors.longitude) setErrors(prev => ({ ...prev, longitude: '' }));
+                  }}
                   placeholder="e.g. 76.2711"
                   required
                 />
+                {errors.longitude && (
+                  <span className="form-error-inline">
+                    <AlertTriangle size={12} /> {errors.longitude}
+                  </span>
+                )}
               </div>
             </div>
 

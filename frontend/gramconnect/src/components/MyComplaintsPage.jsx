@@ -39,7 +39,6 @@ export default function MyComplaintsPage() {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [trackingComplaint, setTrackingComplaint] = useState(null);
   const [editingComplaint, setEditingComplaint] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -119,9 +118,6 @@ export default function MyComplaintsPage() {
         setComplaints((prev) => prev.filter((c) => c._id !== id));
         if (selectedComplaint && selectedComplaint._id === id) {
           setSelectedComplaint(null);
-        }
-        if (trackingComplaint && trackingComplaint._id === id) {
-          setTrackingComplaint(null);
         }
         if (editingComplaint && editingComplaint._id === id) {
           setEditingComplaint(null);
@@ -600,7 +596,7 @@ export default function MyComplaintsPage() {
                         <button 
                           className="btn-action-track" 
                           title="Track Progress"
-                          onClick={() => setTrackingComplaint(c)}
+                          onClick={() => window.location.hash = `#dashboard/status?id=${c.complaintId}`}
                         >
                           <Clock size={13} />
                         </button>
@@ -683,7 +679,7 @@ export default function MyComplaintsPage() {
                     <Eye size={12} />
                     <span>View</span>
                   </button>
-                  <button onClick={() => setTrackingComplaint(c)} className="btn-mobile-act track">
+                  <button onClick={() => window.location.hash = `#dashboard/status?id=${c.complaintId}`} className="btn-mobile-act track">
                     <Clock size={12} />
                     <span>Track</span>
                   </button>
@@ -849,7 +845,7 @@ export default function MyComplaintsPage() {
                     className="btn-modal-action track-btn"
                     onClick={() => {
                       setSelectedComplaint(null);
-                      setTrackingComplaint(selectedComplaint);
+                      window.location.hash = `#dashboard/status?id=${selectedComplaint.complaintId}`;
                     }}
                     style={{
                       background: 'var(--primary-light)',
@@ -908,119 +904,7 @@ export default function MyComplaintsPage() {
         </div>
       )}
 
-      {/* Progress Tracking Timeline Modal */}
-      {trackingComplaint && (
-        <div className="modal-backdrop" onClick={() => setTrackingComplaint(null)}>
-          <div className="modal-content-card glass-card timeline-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-row">
-              <div className="modal-title-meta">
-                <span className="modal-subtitle">COMPLAINT TRACKER</span>
-                <h3 className="modal-title">Tracking Progress for {trackingComplaint.complaintId}</h3>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginTop: '4px' }}>
-                  <strong>Title:</strong> {trackingComplaint.title || 'Civic Issue'}
-                </span>
-              </div>
-              <button className="btn-close-modal" onClick={() => setTrackingComplaint(null)}>
-                <X size={20} />
-              </button>
-            </div>
 
-            <div className="modal-timeline-body">
-              {/* Timeline content helper */}
-              {(() => {
-                const status = trackingComplaint.status;
-                const isPending = status === 'Pending';
-                const isInProgress = status === 'In Progress';
-                const isResolved = status === 'Resolved';
-                const isRejected = status === 'Rejected';
-
-                const step1Status = 'completed';
-                
-                let step2Status = 'upcoming';
-                if (!isPending) {
-                  step2Status = (isInProgress || isResolved || isRejected) ? 'completed' : 'current';
-                } else {
-                  step2Status = 'current';
-                }
-
-                let step3Status = 'upcoming';
-                if (isInProgress) {
-                  step3Status = 'current';
-                } else if (isResolved || isRejected) {
-                  step3Status = 'completed';
-                }
-
-                let step4Status = 'upcoming';
-                if (isResolved || isRejected) {
-                  step4Status = 'completed';
-                }
-
-                return (
-                  <div className="tracking-timeline">
-                    <div className={`timeline-step ${step1Status}`}>
-                      <div className="step-marker" />
-                      <div className="step-content-box">
-                        <h4 className="step-lbl">Complaint Submitted</h4>
-                        <p className="step-desc">Your complaint has been successfully recorded on the portal.</p>
-                        <span className="step-time-badge"><Calendar size={11} /> {formatDate(trackingComplaint.createdAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className={`timeline-step ${step2Status}`}>
-                      <div className="step-marker" />
-                      <div className="step-content-box">
-                        <h4 className="step-lbl">Reviewed & Dispatched</h4>
-                        <p className="step-desc">
-                          {step2Status === 'completed' 
-                            ? `Complaint reviewed by administrators and successfully assigned to ${trackingComplaint.assignedDepartment}.`
-                            : 'Admin is currently reviewing the complaint for department routing.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className={`timeline-step ${step3Status}`}>
-                      <div className="step-marker" />
-                      <div className="step-content-box">
-                        <h4 className="step-lbl">Investigation & In Progress</h4>
-                        <p className="step-desc">
-                          {step3Status === 'completed'
-                            ? 'Field inspection is completed and the issue is resolved.'
-                            : step3Status === 'current'
-                            ? `The assigned department (${trackingComplaint.assignedDepartment}) is working on the site.`
-                            : 'Resolutions will initiate after assignment review.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className={`timeline-step ${step4Status} ${isRejected ? 'rejected' : ''}`}>
-                      <div className="step-marker" />
-                      <div className="step-content-box">
-                        <h4 className="step-lbl">{isRejected ? 'Report Rejected' : 'Issue Resolved'}</h4>
-                        <p className="step-desc">
-                          {isRejected 
-                            ? 'This complaint could not be resolved or was rejected after inspection.'
-                            : isResolved 
-                            ? 'Action completed. The issue has been marked resolved.' 
-                            : 'Final resolution validation is pending.'}
-                        </p>
-                        {(isResolved || isRejected) && (
-                          <span className="step-time-badge"><Calendar size={11} /> {formatDate(trackingComplaint.updatedAt)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            
-            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setTrackingComplaint(null)} className="btn-close-timeline-modal" style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', color: 'var(--text-dark)', padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
-                Close Tracker
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Edit Complaint Modal (Pending Only) */}
       {editingComplaint && (

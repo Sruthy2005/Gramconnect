@@ -154,6 +154,10 @@ export default function ProfilePage({ onLogout }) {
       showToast('District is required.', 'error');
       return;
     }
+    if (!localBodyType) {
+      showToast('Local Body Type is required.', 'error');
+      return;
+    }
     if (!localBody) {
       showToast('Local Body is required.', 'error');
       return;
@@ -447,9 +451,35 @@ export default function ProfilePage({ onLogout }) {
               </div>
             </div>
 
+            {/* Local Body Type */}
+            <div className="input-field-group">
+              <label className="input-label" htmlFor="localBodyType">Local Body Type *</label>
+              <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
+                <select
+                  id="localBodyType"
+                  className="profile-input"
+                  value={localBodyType}
+                  onChange={(e) => {
+                    setLocalBodyType(e.target.value);
+                    setLocalBody('');
+                    setWard('');
+                  }}
+                  disabled={!isEditing || profileSaving || !district}
+                  required
+                  style={{ width: '100%', paddingLeft: '44px', textIndent: '44px', color: localBodyType ? 'var(--text-dark)' : '#94a3b8' }}
+                >
+                  <option value="" style={{ color: '#94a3b8' }}>Select Local Body Type</option>
+                  <option value="Panchayat" style={{ color: 'var(--text-dark)' }}>Panchayat</option>
+                  <option value="Municipality" style={{ color: 'var(--text-dark)' }}>Municipality</option>
+                  <option value="Corporation" style={{ color: 'var(--text-dark)' }}>Corporation</option>
+                </select>
+              </div>
+            </div>
+
             {/* Local Body */}
             <div className="input-field-group">
-              <label className="input-label" htmlFor="localBody">Panchayat / Municipality / Corporation *</label>
+              <label className="input-label" htmlFor="localBody">Local Body *</label>
               <div className="input-wrapper" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                 <MapPin size={16} className="input-icon-left" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', margin: 0 }} />
                 <select
@@ -457,52 +487,21 @@ export default function ProfilePage({ onLogout }) {
                   className="profile-input"
                   value={localBody}
                   onChange={(e) => {
-                    const selected = e.target.value;
-                    setLocalBody(selected);
-                    if (district && LOCATION_DATA[district]) {
-                      const distData = LOCATION_DATA[district];
-                      if (distData.Corporations.includes(selected)) {
-                        setLocalBodyType('Corporation');
-                      } else if (distData.Municipalities.includes(selected)) {
-                        setLocalBodyType('Municipality');
-                      } else if (distData.Panchayats.includes(selected)) {
-                        setLocalBodyType('Panchayat');
-                      } else {
-                        setLocalBodyType('');
-                      }
-                    }
+                    setLocalBody(e.target.value);
                     setWard('');
                   }}
-                  disabled={!isEditing || profileSaving || !district}
+                  disabled={!isEditing || profileSaving || !localBodyType}
                   required
                   style={{ width: '100%', paddingLeft: '44px', textIndent: '44px', color: localBody ? 'var(--text-dark)' : '#94a3b8' }}
                 >
                   <option value="" style={{ color: '#94a3b8' }}>Select Local Body</option>
-                  {district && LOCATION_DATA[district] && (
-                    <>
-                      {LOCATION_DATA[district].Corporations.length > 0 && (
-                        <optgroup label="Corporations" style={{ color: 'var(--text-dark)' }}>
-                          {LOCATION_DATA[district].Corporations.map((c) => (
-                            <option key={c} value={c} style={{ color: 'var(--text-dark)' }}>{c}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {LOCATION_DATA[district].Municipalities.length > 0 && (
-                        <optgroup label="Municipalities" style={{ color: 'var(--text-dark)' }}>
-                          {LOCATION_DATA[district].Municipalities.map((m) => (
-                            <option key={m} value={m} style={{ color: 'var(--text-dark)' }}>{m}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {LOCATION_DATA[district].Panchayats.length > 0 && (
-                        <optgroup label="Panchayats" style={{ color: 'var(--text-dark)' }}>
-                          {LOCATION_DATA[district].Panchayats.map((p) => (
-                            <option key={p} value={p} style={{ color: 'var(--text-dark)' }}>{p}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </>
-                  )}
+                  {district && localBodyType && LOCATION_DATA[district] && (() => {
+                    const key = localBodyType === 'Panchayat' ? 'Panchayats' : localBodyType === 'Municipality' ? 'Municipalities' : 'Corporations';
+                    const list = LOCATION_DATA[district][key] || [];
+                    return list.map((item) => (
+                      <option key={item} value={item} style={{ color: 'var(--text-dark)' }}>{item}</option>
+                    ));
+                  })()}
                 </select>
               </div>
             </div>

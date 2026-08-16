@@ -209,15 +209,33 @@ const seedMockDataIfEmpty = async (adminId) => {
 const getAdminStats = asyncHandler(async (req, res) => {
   await seedMockDataIfEmpty(req.user._id);
 
+  const { startDate, endDate } = req.query;
+  const complaintFilter = {};
+  if (startDate || endDate) {
+    complaintFilter.createdAt = {};
+    if (startDate) {
+      const sDate = new Date(startDate);
+      sDate.setHours(0, 0, 0, 0);
+      complaintFilter.createdAt.$gte = sDate;
+    }
+    if (endDate) {
+      const eDate = new Date(endDate);
+      eDate.setHours(23, 59, 59, 999);
+      complaintFilter.createdAt.$lte = eDate;
+    }
+  }
+
   // Aggregated Counts from MongoDB
-  const total = await Complaint.countDocuments();
-  const pending = await Complaint.countDocuments({ status: 'Pending' });
-  const verified = await Complaint.countDocuments({ status: 'Verified' });
-  const assigned = await Complaint.countDocuments({ status: 'Assigned' });
-  const inProgress = await Complaint.countDocuments({ status: 'In Progress' });
-  const resolved = await Complaint.countDocuments({ status: 'Resolved' });
-  const rejected = await Complaint.countDocuments({ status: 'Rejected' });
-  const activeUsers = await User.countDocuments();
+  const total = await Complaint.countDocuments(complaintFilter);
+  const pending = await Complaint.countDocuments({ ...complaintFilter, status: 'Pending' });
+  const verified = await Complaint.countDocuments({ ...complaintFilter, status: 'Verified' });
+  const assigned = await Complaint.countDocuments({ ...complaintFilter, status: 'Assigned' });
+  const inProgress = await Complaint.countDocuments({ ...complaintFilter, status: 'In Progress' });
+  const resolved = await Complaint.countDocuments({ ...complaintFilter, status: 'Resolved' });
+  const rejected = await Complaint.countDocuments({ ...complaintFilter, status: 'Rejected' });
+  
+  const totalCitizens = await User.countDocuments({ role: 'citizen', isDeleted: { $ne: true } });
+  const activeUsers = await User.countDocuments({ status: 'Active', isDeleted: { $ne: true } });
 
   // Dynamic Departments count based on unique routed departments or categories map
   const uniqueDepts = await Complaint.distinct('assignedDepartment');
@@ -226,6 +244,7 @@ const getAdminStats = asyncHandler(async (req, res) => {
 
   // Category distribution
   const categoryData = await Complaint.aggregate([
+    { $match: complaintFilter },
     {
       $group: {
         _id: '$category',
@@ -259,7 +278,6 @@ const getAdminStats = asyncHandler(async (req, res) => {
     count: countMap[cat] || 0
   }));
 
-  // Sort descending so the top categories are displayed first
   categoryStats.sort((a, b) => b.count - a.count);
 
   // Monthly trends (dynamically fetch last 6 months from database)
@@ -274,12 +292,25 @@ const getAdminStats = asyncHandler(async (req, res) => {
     const startOfMonth = new Date(year, month, 1);
     const endOfMonth = new Date(year, month + 1, 1);
 
-    const count = await Complaint.countDocuments({
+    // Apply date range intersections if present
+    const trendFilter = {
       createdAt: {
         $gte: startOfMonth,
         $lt: endOfMonth
       }
-    });
+    };
+    if (complaintFilter.createdAt) {
+      if (complaintFilter.createdAt.$gte && trendFilter.createdAt.$gte < complaintFilter.createdAt.$gte) {
+        trendFilter.createdAt.$gte = complaintFilter.createdAt.$gte;
+      }
+      if (complaintFilter.createdAt.$lte && trendFilter.createdAt.$lt > complaintFilter.createdAt.$lte) {
+        trendFilter.createdAt.$lt = complaintFilter.createdAt.$lte;
+      }
+    }
+
+    const count = (trendFilter.createdAt.$gte < trendFilter.createdAt.$lt) 
+      ? await Complaint.countDocuments(trendFilter) 
+      : 0;
 
     complaintTrends.push({ month: monthName, count });
   }
@@ -294,18 +325,31 @@ const getAdminStats = asyncHandler(async (req, res) => {
     const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 
-    const count = await Complaint.countDocuments({
+    const trendFilter = {
       createdAt: {
         $gte: startOfDay,
         $lt: endOfDay
       }
-    });
+    };
+    if (complaintFilter.createdAt) {
+      if (complaintFilter.createdAt.$gte && trendFilter.createdAt.$gte < complaintFilter.createdAt.$gte) {
+        trendFilter.createdAt.$gte = complaintFilter.createdAt.$gte;
+      }
+      if (complaintFilter.createdAt.$lte && trendFilter.createdAt.$lt > complaintFilter.createdAt.$lte) {
+        trendFilter.createdAt.$lt = complaintFilter.createdAt.$lte;
+      }
+    }
+
+    const count = (trendFilter.createdAt.$gte < trendFilter.createdAt.$lt)
+      ? await Complaint.countDocuments(trendFilter)
+      : 0;
 
     dailyTrends.push({ day: dayLabel, count });
   }
 
   // Location Analytics (Top 5 locations/cities with highest complaints count)
   const locationStatsRaw = await Complaint.aggregate([
+    { $match: complaintFilter },
     {
       $group: {
         _id: '$city',
@@ -327,6 +371,7 @@ const getAdminStats = asyncHandler(async (req, res) => {
 
   // Department-wise SLA & routing performance
   const deptPerformanceRaw = await Complaint.aggregate([
+    { $match: complaintFilter },
     {
       $group: {
         _id: '$assignedDepartment',
@@ -377,11 +422,75 @@ const getAdminStats = asyncHandler(async (req, res) => {
     };
   });
 
-  // Sort by total complaints assigned descending
   departmentPerformance.sort((a, b) => b.total - a.total);
 
+  // Priority distribution
+  const priorityDataRaw = await Complaint.aggregate([
+    { $match: complaintFilter },
+    {
+      $group: {
+        _id: '$priority',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  const priorityStats = {
+    Low: 0,
+    Normal: 0,
+    High: 0,
+    Urgent: 0
+  };
+  priorityDataRaw.forEach(item => {
+    const key = item._id || 'Normal';
+    if (priorityStats[key] !== undefined) {
+      priorityStats[key] = item.count;
+    }
+  });
+
+  // Panchayath-wise comparison
+  const panchayatStatsRaw = await Complaint.aggregate([
+    { $match: complaintFilter },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'userInfo'
+      }
+    },
+    {
+      $unwind: '$userInfo'
+    },
+    {
+      $group: {
+        _id: '$userInfo.panchayat',
+        total: { $sum: 1 },
+        resolved: {
+          $sum: { $cond: [{ $eq: ['$status', 'Resolved'] }, 1, 0] }
+        },
+        pending: {
+          $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
+        }
+      }
+    }
+  ]);
+
+  const panchayatPerformance = panchayatStatsRaw.map(item => {
+    const successRate = item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0;
+    return {
+      panchayat: item._id || 'General/Not Assigned',
+      total: item.total,
+      resolved: item.resolved,
+      pending: item.pending,
+      successRate
+    };
+  });
+  
+  panchayatPerformance.sort((a, b) => b.total - a.total);
+
   // Recent complaints (latest 5)
-  const recentComplaints = await Complaint.find()
+  const recentComplaints = await Complaint.find(complaintFilter)
     .sort({ createdAt: -1 })
     .limit(5)
     .populate('user', 'fullName');
@@ -418,6 +527,7 @@ const getAdminStats = asyncHandler(async (req, res) => {
       resolved,
       rejected,
       activeUsers,
+      totalCitizens,
       departments: departmentsCount
     },
     recentComplaints,
@@ -427,7 +537,9 @@ const getAdminStats = asyncHandler(async (req, res) => {
       monthlyTrends: complaintTrends,
       dailyTrends,
       topLocations,
-      departmentPerformance
+      departmentPerformance,
+      priorityDistribution: priorityStats,
+      panchayatPerformance
     }
   });
 });
@@ -559,6 +671,16 @@ const updateComplaintAdmin = asyncHandler(async (req, res) => {
   if (dueDate !== undefined) complaint.dueDate = dueDate;
   if (adminNote) complaint.landmark = adminNote;
 
+  // Fallback defaults for legacy documents to prevent Mongoose schema validation failure on save
+  if (!complaint.taluk || complaint.taluk === 'undefined') complaint.taluk = 'Kollam';
+  if (!complaint.localBody || complaint.localBody === 'undefined') complaint.localBody = 'Eravipuram Panchayat';
+  if (!complaint.localBodyType || complaint.localBodyType === 'undefined') complaint.localBodyType = 'Grama Panchayat';
+  if (!complaint.city || complaint.city === 'undefined') complaint.city = 'Eravipuram';
+  if (!complaint.pincode || complaint.pincode === 'undefined') complaint.pincode = '691011';
+  if (complaint.latitude === undefined || complaint.latitude === null) complaint.latitude = 8.8932;
+  if (complaint.longitude === undefined || complaint.longitude === null) complaint.longitude = 76.6141;
+  if (!complaint.priority) complaint.priority = 'Normal';
+
   await complaint.save();
 
   // Trigger Notifications based on modified values
@@ -586,7 +708,9 @@ const updateComplaintAdmin = asyncHandler(async (req, res) => {
         title: 'Officer Accepted Assignment',
         message: `${complaint.assignedDepartment} officer has accepted assignment for complaint ${complaint.complaintId}.`,
         type: 'Success',
-        relatedComplaint: complaint._id
+        relatedComplaint: complaint._id,
+        districtTarget: req.user.district || 'ALL',
+        panchayatTarget: req.user.panchayat || 'ALL'
       });
     } else if (status === 'In Progress') {
       await createNotification({
@@ -619,7 +743,9 @@ const updateComplaintAdmin = asyncHandler(async (req, res) => {
         title: 'Officer Completed Work',
         message: `Completed: Assigned field officer reported resolution on complaint ${complaint.complaintId}.`,
         type: 'Success',
-        relatedComplaint: complaint._id
+        relatedComplaint: complaint._id,
+        districtTarget: req.user.district || 'ALL',
+        panchayatTarget: req.user.panchayat || 'ALL'
       });
     } else if (status === 'Rejected') {
       await createNotification({
@@ -645,7 +771,9 @@ const updateComplaintAdmin = asyncHandler(async (req, res) => {
       title: 'Officer Accepted Assignment',
       message: `${complaint.assignedDepartment} officer has accepted assignment for complaint ${complaint.complaintId}.`,
       type: 'Success',
-      relatedComplaint: complaint._id
+      relatedComplaint: complaint._id,
+      districtTarget: req.user.district || 'ALL',
+      panchayatTarget: req.user.panchayat || 'ALL'
     });
   }
 

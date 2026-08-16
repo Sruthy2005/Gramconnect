@@ -46,6 +46,18 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       required: [true, 'District is required']
     },
+    taluk: {
+      type: String,
+      required: [true, 'Taluk is required']
+    },
+    localBodyType: {
+      type: String,
+      required: [true, 'Local Body Type is required']
+    },
+    localBody: {
+      type: String,
+      required: [true, 'Local Body is required']
+    },
     city: {
       type: String,
       required: [true, 'City is required']
@@ -64,11 +76,11 @@ const complaintSchema = new mongoose.Schema(
     },
     latitude: {
       type: Number,
-      default: null
+      required: [true, 'Latitude is required']
     },
     longitude: {
       type: Number,
-      default: null
+      required: [true, 'Longitude is required']
     },
     images: {
       type: [String],
@@ -101,6 +113,7 @@ const complaintSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
+      required: [true, 'Priority level is required'],
       enum: ['Normal', 'Medium', 'High', 'Urgent'],
       default: 'Normal'
     },

@@ -41,6 +41,10 @@ const notificationSchema = new mongoose.Schema(
     districtTarget: {
       type: String,
       default: 'ALL'
+    },
+    panchayatTarget: {
+      type: String,
+      default: 'ALL'
     }
   },
   {

@@ -6,27 +6,36 @@ const jwt = require('jsonwebtoken');
 const sse = require('../utils/sse');
 const { createNotification } = require('../utils/notificationHelper');
 
-// @desc    Get user's notifications (user-specific or role-based)
-// @route   GET /api/notifications
-// @access  Private
 const getNotifications = asyncHandler(async (req, res) => {
   const userRole = req.user.role ? req.user.role.toLowerCase() : 'citizen';
-  const userDistrict = req.user.district || 'Ernakulam';
+  const userDistrict = req.user.district || '';
+  const userPanchayat = req.user.panchayat || '';
+
+  const isAnyAdmin = ['admin', 'super_admin', 'panchayat_admin'].includes(userRole);
   
+  const roleQuery = isAnyAdmin 
+    ? { $in: ['admin', 'Admin', 'panchayat_admin', 'PANCHAYAT_ADMIN'] } 
+    : { $in: ['citizen', 'Citizen'] };
+
+  const districtConditions = [{ districtTarget: { $exists: false } }, { districtTarget: 'ALL' }];
+  if (userDistrict) {
+    districtConditions.push({ districtTarget: userDistrict });
+  }
+
+  const panchayatConditions = [{ panchayatTarget: { $exists: false } }, { panchayatTarget: 'ALL' }];
+  if (userPanchayat) {
+    panchayatConditions.push({ panchayatTarget: userPanchayat });
+  }
+
   const notifications = await Notification.find({
     $or: [
       { recipientUser: req.user._id },
       { 
         $and: [
           { recipientUser: null },
-          { recipientRole: userRole === 'admin' ? { $in: ['admin', 'Admin'] } : { $in: ['citizen', 'Citizen'] } },
-          {
-            $or: [
-              { districtTarget: { $exists: false } },
-              { districtTarget: 'ALL' },
-              { districtTarget: userDistrict }
-            ]
-          }
+          { recipientRole: roleQuery },
+          { $or: districtConditions },
+          { $or: panchayatConditions }
         ]
       }
     ]
@@ -45,8 +54,25 @@ const getNotifications = asyncHandler(async (req, res) => {
 // @access  Private
 const getUnreadCount = asyncHandler(async (req, res) => {
   const userRole = req.user.role ? req.user.role.toLowerCase() : 'citizen';
-  const userDistrict = req.user.district || 'Ernakulam';
+  const userDistrict = req.user.district || '';
+  const userPanchayat = req.user.panchayat || '';
+
+  const isAnyAdmin = ['admin', 'super_admin', 'panchayat_admin'].includes(userRole);
   
+  const roleQuery = isAnyAdmin 
+    ? { $in: ['admin', 'Admin', 'panchayat_admin', 'PANCHAYAT_ADMIN'] } 
+    : { $in: ['citizen', 'Citizen'] };
+
+  const districtConditions = [{ districtTarget: { $exists: false } }, { districtTarget: 'ALL' }];
+  if (userDistrict) {
+    districtConditions.push({ districtTarget: userDistrict });
+  }
+
+  const panchayatConditions = [{ panchayatTarget: { $exists: false } }, { panchayatTarget: 'ALL' }];
+  if (userPanchayat) {
+    panchayatConditions.push({ panchayatTarget: userPanchayat });
+  }
+
   const count = await Notification.countDocuments({
     isRead: false,
     $or: [
@@ -54,14 +80,9 @@ const getUnreadCount = asyncHandler(async (req, res) => {
       { 
         $and: [
           { recipientUser: null },
-          { recipientRole: userRole === 'admin' ? { $in: ['admin', 'Admin'] } : { $in: ['citizen', 'Citizen'] } },
-          {
-            $or: [
-              { districtTarget: { $exists: false } },
-              { districtTarget: 'ALL' },
-              { districtTarget: userDistrict }
-            ]
-          }
+          { recipientRole: roleQuery },
+          { $or: districtConditions },
+          { $or: panchayatConditions }
         ]
       }
     ]

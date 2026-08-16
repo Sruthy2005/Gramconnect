@@ -32,7 +32,17 @@ const getProfile = asyncHandler(async (req, res) => {
       role: user.role,
       authProvider: user.authProvider || 'local',
       profilePicture: user.profilePicture || '',
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      notificationPreferences: user.notificationPreferences || {
+        complaintUpdates: true,
+        announcements: true,
+        communityNotifs: true,
+        emailNotifs: true
+      },
+      privacySettings: user.privacySettings || {
+        profilePublic: true,
+        communityVisible: true
+      }
     }
   });
 });
@@ -123,7 +133,17 @@ const updateProfile = asyncHandler(async (req, res) => {
       role: user.role,
       authProvider: user.authProvider || 'local',
       profilePicture: user.profilePicture || '',
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      notificationPreferences: user.notificationPreferences || {
+        complaintUpdates: true,
+        announcements: true,
+        communityNotifs: true,
+        emailNotifs: true
+      },
+      privacySettings: user.privacySettings || {
+        profilePublic: true,
+        communityVisible: true
+      }
     }
   });
 });
@@ -233,9 +253,89 @@ const changePassword = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get user settings
+// @route   GET /api/profile/settings
+// @access  Private
+const getSettings = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  res.status(200).json({
+    success: true,
+    notificationPreferences: user.notificationPreferences || {
+      complaintUpdates: true,
+      announcements: true,
+      communityNotifs: true,
+      emailNotifs: true
+    },
+    privacySettings: user.privacySettings || {
+      profilePublic: true,
+      communityVisible: true
+    }
+  });
+});
+
+// @desc    Update user settings
+// @route   PUT /api/profile/settings
+// @access  Private
+const updateSettings = asyncHandler(async (req, res) => {
+  const { notificationPreferences, privacySettings } = req.body;
+
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  if (notificationPreferences) {
+    user.notificationPreferences = {
+      ...user.notificationPreferences,
+      ...notificationPreferences
+    };
+  }
+
+  if (privacySettings) {
+    user.privacySettings = {
+      ...user.privacySettings,
+      ...privacySettings
+    };
+  }
+
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Settings updated successfully',
+    notificationPreferences: user.notificationPreferences,
+    privacySettings: user.privacySettings
+  });
+});
+
+// @desc    Delete user account (soft delete)
+// @route   DELETE /api/profile
+// @access  Private
+const deleteAccount = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  user.isDeleted = true;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Account deleted successfully'
+  });
+});
+
 module.exports = {
   getProfile,
   updateProfile,
   updateProfilePhoto,
-  changePassword
+  changePassword,
+  getSettings,
+  updateSettings,
+  deleteAccount
 };

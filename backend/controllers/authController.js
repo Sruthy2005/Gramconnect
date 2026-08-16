@@ -123,6 +123,8 @@ const loginUser = asyncHandler(async (req, res) => {
       localBody: user.localBody || '',
       localBodyType: user.localBodyType || '',
       ward: user.ward || '',
+      panchayat: user.panchayat || '',
+      panchayatCode: user.panchayatCode || '',
       token
     });
   } else {
@@ -164,7 +166,9 @@ const getUserProfile = asyncHandler(async (req, res) => {
       district: user.district || '',
       localBody: user.localBody || '',
       localBodyType: user.localBodyType || '',
-      ward: user.ward || ''
+      ward: user.ward || '',
+      panchayat: user.panchayat || '',
+      panchayatCode: user.panchayatCode || ''
     });
   } else {
     res.status(404).json({ message: 'User not found' });

@@ -118,6 +118,34 @@ const userSchema = new mongoose.Schema(
     passwordResetExpires: Date,
     passwordResetOtp: String,
     passwordResetOtpExpires: Date,
+    notificationPreferences: {
+      complaintUpdates: {
+        type: Boolean,
+        default: true
+      },
+      announcements: {
+        type: Boolean,
+        default: true
+      },
+      communityNotifs: {
+        type: Boolean,
+        default: true
+      },
+      emailNotifs: {
+        type: Boolean,
+        default: true
+      }
+    },
+    privacySettings: {
+      profilePublic: {
+        type: Boolean,
+        default: true
+      },
+      communityVisible: {
+        type: Boolean,
+        default: true
+      }
+    },
     isDeleted: {
       type: Boolean,
       default: false

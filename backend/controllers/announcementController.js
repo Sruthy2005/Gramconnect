@@ -54,14 +54,20 @@ const getAnnouncements = asyncHandler(async (req, res) => {
     ];
   } else {
     // Admin filtering options
-    if (status && status !== 'All') {
-      filter.status = status;
-    }
-    if (district && district !== 'All') {
-      filter.district = district;
-    }
-    if (panchayat && panchayat !== 'All') {
-      filter.panchayat = panchayat;
+    const isPanchayatAdmin = req.user.role && ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+    if (isPanchayatAdmin) {
+      filter.panchayat = req.user.panchayat || 'None';
+      filter.district = req.user.district || 'None';
+    } else {
+      if (status && status !== 'All') {
+        filter.status = status;
+      }
+      if (district && district !== 'All') {
+        filter.district = district;
+      }
+      if (panchayat && panchayat !== 'All') {
+        filter.panchayat = panchayat;
+      }
     }
   }
 
@@ -142,13 +148,21 @@ const createAnnouncement = asyncHandler(async (req, res) => {
     formattedExpiryDate = new Date(Date.UTC(year, month - 1, day, 18, 29, 59, 999));
   }
 
+  const isPanchayatAdmin = req.user.role && ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+  let targetDistrict = district;
+  let targetPanchayat = panchayat;
+  if (isPanchayatAdmin) {
+    targetDistrict = req.user.district;
+    targetPanchayat = req.user.panchayat;
+  }
+
   const announcement = await Announcement.create({
     title,
     description,
     category,
     priority: priority || 'Normal',
-    district: district || 'All',
-    panchayat: panchayat || 'All',
+    district: targetDistrict || 'All',
+    panchayat: targetPanchayat || 'All',
     publishedBy: req.user._id,
     publishDate: publishDate || new Date(),
     expiryDate: formattedExpiryDate,
@@ -162,7 +176,9 @@ const createAnnouncement = asyncHandler(async (req, res) => {
     message: description.substring(0, 100) + (description.length > 100 ? '...' : ''),
     recipientRole: 'citizen',
     type: priority === 'Urgent' ? 'Warning' : 'Information',
-    relatedAnnouncement: title
+    relatedAnnouncement: title,
+    districtTarget: targetDistrict || 'ALL',
+    panchayatTarget: targetPanchayat || 'ALL'
   });
 
   const populated = await Announcement.findById(announcement._id)

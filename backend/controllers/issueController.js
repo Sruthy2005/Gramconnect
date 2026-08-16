@@ -32,6 +32,9 @@ const createComplaint = asyncHandler(async (req, res) => {
     category,
     state,
     district,
+    taluk,
+    localBody,
+    localBodyType,
     city,
     ward,
     landmark,
@@ -39,16 +42,41 @@ const createComplaint = asyncHandler(async (req, res) => {
     latitude,
     longitude,
     anonymous,
+    priority,
     urgent
   } = req.body;
 
   // Basic validation (Requirement 13)
-  if (!title || !description || !category || !state || !district || !city || !pincode) {
+  if (
+    !title ||
+    !description ||
+    !category ||
+    !state ||
+    !district ||
+    !taluk ||
+    !localBody ||
+    !localBodyType ||
+    !city ||
+    !pincode ||
+    latitude === undefined ||
+    latitude === null ||
+    latitude === '' ||
+    longitude === undefined ||
+    longitude === null ||
+    longitude === '' ||
+    !priority
+  ) {
     return res.status(400).json({ message: 'All required fields must be provided' });
   }
 
   if (description.trim().length < 20) {
     return res.status(400).json({ message: 'Description must be at least 20 characters long' });
+  }
+
+  const parsedLat = parseFloat(latitude);
+  const parsedLng = parseFloat(longitude);
+  if (isNaN(parsedLat) || isNaN(parsedLng)) {
+    return res.status(400).json({ message: 'Latitude and Longitude must be valid numbers' });
   }
 
   // Anti-spam guard: prevent duplicate submissions within 10 seconds (Requirement 13)
@@ -67,9 +95,9 @@ const createComplaint = asyncHandler(async (req, res) => {
   const departmentName = categoryDepartmentMap[category] || 'General Panchayat Administration';
 
   // Simulated AI Severity and Priority logic
-  const isUrgent = urgent === 'true' || urgent === true;
+  const isUrgent = urgent === 'true' || urgent === true || priority === 'Urgent';
   let severity = 'Low';
-  let priorityLevel = 'Normal';
+  let priorityLevel = priority || 'Normal';
 
   const emergencyKeywords = ['danger', 'emergency', 'fire', 'flood', 'accident', 'injured', 'broken wire', 'short circuit'];
   const hasEmergencyKeywords = emergencyKeywords.some(keyword =>
@@ -107,14 +135,17 @@ const createComplaint = asyncHandler(async (req, res) => {
     title: title.trim(),
     description: description.trim(),
     category,
-    state,
-    district,
-    city,
+    state: state.trim(),
+    district: district.trim(),
+    taluk: taluk.trim(),
+    localBodyType: localBodyType.trim(),
+    localBody: localBody.trim(),
+    city: city.trim(),
     ward: ward || '',
     landmark: landmark || '',
-    pincode,
-    latitude: latitude ? parseFloat(latitude) : null,
-    longitude: longitude ? parseFloat(longitude) : null,
+    pincode: pincode.trim(),
+    latitude: parsedLat,
+    longitude: parsedLng,
     images: imageUrls,
     anonymous: anonymous === 'true' || anonymous === true,
     urgent: isUrgent,
@@ -141,7 +172,9 @@ const createComplaint = asyncHandler(async (req, res) => {
     title: 'New Complaint Submitted',
     message: `A new civic report "${complaint.title}" (${complaint.complaintId}) has been registered.`,
     type: 'Information',
-    relatedComplaint: complaint._id
+    relatedComplaint: complaint._id,
+    districtTarget: req.user.district || 'ALL',
+    panchayatTarget: req.user.panchayat || 'ALL'
   });
 
   // Create Admin Notification if Urgent
@@ -151,7 +184,9 @@ const createComplaint = asyncHandler(async (req, res) => {
       title: 'Urgent Complaint Submitted',
       message: `URGENT: A critical severity report "${complaint.title}" (${complaint.complaintId}) was filed.`,
       type: 'Warning',
-      relatedComplaint: complaint._id
+      relatedComplaint: complaint._id,
+      districtTarget: req.user.district || 'ALL',
+      panchayatTarget: req.user.panchayat || 'ALL'
     });
   }
 

@@ -22,13 +22,15 @@ import {
   X,
   Plus,
   Check,
-  Calendar
+  Calendar,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GramConnectIcon } from './GramConnectLogo';
 import api from '../utils/api';
 import './AdminDashboard.css';
 import './UserDashboard.css';
+import './PanchayatAdminDashboard.css';
 
 const PANCHAYAT_ADMIN_ROLES = ['panchayat_admin', 'PANCHAYAT_ADMIN'];
 
@@ -69,6 +71,27 @@ export default function PanchayatAdminDashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotif, setLoadingNotif] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+
+  // Announcements
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [annSearchQuery, setAnnSearchQuery] = useState('');
+  const [annCategoryFilter, setAnnCategoryFilter] = useState('All');
+  const [annPriorityFilter, setAnnPriorityFilter] = useState('All');
+  const [annStatusFilter, setAnnStatusFilter] = useState('All');
+  const [annModalOpen, setAnnModalOpen] = useState(false);
+  const [annEditingItem, setAnnEditingItem] = useState(null);
+  const [annDetailsOpen, setAnnDetailsOpen] = useState(false);
+  const [selectedAnnItem, setSelectedAnnItem] = useState(null);
+  const [submittingAnn, setSubmittingAnn] = useState(false);
+
+  // Announcement Form Fields
+  const [annFormTitle, setAnnFormTitle] = useState('');
+  const [annFormDescription, setAnnFormDescription] = useState('');
+  const [annFormCategory, setAnnFormCategory] = useState('General');
+  const [annFormPriority, setAnnFormPriority] = useState('Normal');
+  const [annFormExpiryDate, setAnnFormExpiryDate] = useState('');
+  const [annFormAttachment, setAnnFormAttachment] = useState(null);
 
   const fetchStats = async () => {
     setLoadingStats(true);
@@ -129,6 +152,102 @@ export default function PanchayatAdminDashboard() {
     }
   };
 
+  const fetchAnnouncements = async () => {
+    setAnnouncementsLoading(true);
+    try {
+      const res = await api.get('/announcements');
+      if (res.data?.success) {
+        setAnnouncements(res.data.announcements || []);
+      }
+    } catch (err) {
+      console.error('[PA] Failed to fetch announcements:', err);
+      showToast('Failed to load announcements', 'error');
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  };
+
+  const handleOpenAnnModal = (item = null) => {
+    setAnnEditingItem(item);
+    if (item) {
+      setAnnFormTitle(item.title || '');
+      setAnnFormDescription(item.description || '');
+      setAnnFormCategory(item.category || 'General');
+      setAnnFormPriority(item.priority || 'Normal');
+      setAnnFormExpiryDate(item.expiryDate ? item.expiryDate.substring(0, 10) : '');
+      setAnnFormAttachment(null);
+    } else {
+      setAnnFormTitle('');
+      setAnnFormDescription('');
+      setAnnFormCategory('General');
+      setAnnFormPriority('Normal');
+      setAnnFormExpiryDate('');
+      setAnnFormAttachment(null);
+    }
+    setAnnModalOpen(true);
+  };
+
+  const handleSaveAnnouncement = async (e) => {
+    e.preventDefault();
+    if (!annFormTitle || !annFormDescription || !annFormCategory) {
+      showToast('Please fill in all required fields.', 'error');
+      return;
+    }
+
+    setSubmittingAnn(true);
+    const formData = new FormData();
+    formData.append('title', annFormTitle);
+    formData.append('description', annFormDescription);
+    formData.append('category', annFormCategory);
+    formData.append('priority', annFormPriority);
+    formData.append('district', user?.district || '');
+    formData.append('panchayat', user?.panchayat || '');
+    if (annFormExpiryDate) formData.append('expiryDate', annFormExpiryDate);
+    if (annFormAttachment) {
+      formData.append('attachment', annFormAttachment);
+    }
+
+    try {
+      let res;
+      if (annEditingItem) {
+        res = await api.put(`/announcements/${annEditingItem._id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        res = await api.post('/announcements', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+
+      if (res.data?.success) {
+        showToast(annEditingItem ? 'Announcement updated successfully.' : 'Announcement published successfully.');
+        setAnnModalOpen(false);
+        fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error('[PA] Failed to save announcement:', err);
+      showToast(err.response?.data?.message || 'Failed to save announcement.', 'error');
+    } finally {
+      setSubmittingAnn(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (itemId) => {
+    if (!window.confirm('Are you sure you want to archive this announcement?')) return;
+    try {
+      const res = await api.delete(`/announcements/${itemId}`);
+      if (res.data?.success) {
+        showToast('Announcement archived successfully.');
+        fetchAnnouncements();
+        if (selectedAnnItem && selectedAnnItem._id === itemId) {
+          setAnnDetailsOpen(false);
+        }
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete announcement.', 'error');
+    }
+  };
+
   const handleUpdateComplaintStatus = async (id, status) => {
     try {
       const res = await api.put(`/admin/complaints/${id}`, { status });
@@ -151,6 +270,7 @@ export default function PanchayatAdminDashboard() {
     if (activeTab === 'complaints') fetchComplaints();
     if (activeTab === 'citizens') fetchCitizens();
     if (activeTab === 'notifications') fetchNotifications();
+    if (activeTab === 'announcements') fetchAnnouncements();
   }, [activeTab]);
 
   useEffect(() => {
@@ -327,7 +447,7 @@ export default function PanchayatAdminDashboard() {
       </header>
 
       {/* Sidebar Navigation */}
-      <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside className={`dash-sidebar panchayat-sidebar ${sidebarOpen ? 'open' : ''}`}>
         {/* Assigned Area badge */}
         <div style={{ margin: '0 16px 16px', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: '12px', padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -361,11 +481,39 @@ export default function PanchayatAdminDashboard() {
             <span>Citizens</span>
           </button>
           <button
+            className={`sidebar-item ${activeTab === 'announcements' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('announcements'); setSidebarOpen(false); }}
+          >
+            <Megaphone size={18} />
+            <span>Announcements</span>
+          </button>
+          <button
             className={`sidebar-item ${activeTab === 'notifications' ? 'active' : ''}`}
             onClick={() => { setActiveTab('notifications'); setSidebarOpen(false); }}
           >
             <Bell size={18} />
             <span>Notifications</span>
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === 'reports_analytics' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('reports_analytics'); setSidebarOpen(false); }}
+          >
+            <TrendingUp size={18} />
+            <span>Reports & Analytics</span>
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === 'my_panchayat' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('my_panchayat'); setSidebarOpen(false); }}
+          >
+            <MapPin size={18} />
+            <span>My Panchayath</span>
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
+          >
+            <Settings size={18} />
+            <span>Settings</span>
           </button>
         </div>
 
@@ -734,6 +882,299 @@ export default function PanchayatAdminDashboard() {
             )}
           </div>
         )}
+
+        {/* ==================== ANNOUNCEMENTS TAB ==================== */}
+        {activeTab === 'announcements' && (() => {
+          const filteredAnnouncements = announcements.filter(ann => {
+            const matchesSearch = !annSearchQuery ||
+              ann.title?.toLowerCase().includes(annSearchQuery.toLowerCase()) ||
+              ann.description?.toLowerCase().includes(annSearchQuery.toLowerCase());
+            const matchesCategory = annCategoryFilter === 'All' || ann.category === annCategoryFilter;
+            const matchesPriority = annPriorityFilter === 'All' || ann.priority === annPriorityFilter;
+            const matchesStatus = annStatusFilter === 'All' || ann.status === annStatusFilter;
+            return matchesSearch && matchesCategory && matchesPriority && matchesStatus;
+          });
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Announcements</h1>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Manage local notices for {user?.panchayat || 'your panchayat'}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button className="admin-btn primary" onClick={() => handleOpenAnnModal(null)} style={{ gap: '6px' }}>
+                    <Plus size={16} /> Create Announcement
+                  </button>
+                  <button className="admin-btn secondary" onClick={fetchAnnouncements} style={{ gap: '6px' }}>
+                    <RefreshCw size={14} className={announcementsLoading ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Toolbar */}
+              <div className="unified-filter-toolbar">
+                <div className="search-input-wrapper" style={{ flex: 2 }}>
+                  <Search size={16} className="search-icon" style={{ top: '12px' }} />
+                  <input
+                    type="text"
+                    placeholder="Search announcements..."
+                    value={annSearchQuery}
+                    onChange={(e) => setAnnSearchQuery(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <select
+                    value={annCategoryFilter}
+                    onChange={(e) => setAnnCategoryFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Categories</option>
+                    <option value="General">General</option>
+                    <option value="Public Notice">Public Notice</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Road & Transport">Road & Transport</option>
+                    <option value="Water">Water</option>
+                    <option value="Electricity">Electricity</option>
+                    <option value="Health">Health</option>
+                    <option value="Community">Community</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <select
+                    value={annPriorityFilter}
+                    onChange={(e) => setAnnPriorityFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Priorities</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Important">Important</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <select
+                    value={annStatusFilter}
+                    onChange={(e) => setAnnStatusFilter(e.target.value)}
+                    className="admin-select"
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+
+              {announcementsLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
+                  <span style={{ width: '36px', height: '36px', border: '3px solid #3b82f6', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+                </div>
+              ) : filteredAnnouncements.length === 0 ? (
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '64px', textAlign: 'center', color: '#94a3b8' }}>
+                  <Megaphone size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
+                  <p style={{ fontWeight: 600 }}>No announcements found.</p>
+                </div>
+              ) : (
+                <div className="table-card">
+                  <div className="table-responsive-wrapper">
+                    <table className="complaints-table">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Category</th>
+                          <th>Priority</th>
+                          <th>Status</th>
+                          <th>Publish Date</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAnnouncements.map(ann => (
+                          <tr key={ann._id}>
+                            <td style={{ fontWeight: 600, color: '#1e293b' }}>{ann.title}</td>
+                            <td>{ann.category}</td>
+                            <td>
+                              <span className={`badge-priority ${getPriorityClass(ann.priority)}`}>
+                                {ann.priority}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="status-pill" style={{ ...getStatusBadgeStyle(ann.status === 'Active' ? 'Resolved' : 'Rejected'), fontWeight: 700, padding: '4px 8px', borderRadius: '9999px', fontSize: '0.72rem' }}>
+                                {ann.status}
+                              </span>
+                            </td>
+                            <td style={{ color: '#64748b' }}>{formatDate(ann.publishDate || ann.createdAt)}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="admin-btn secondary" onClick={() => { setSelectedAnnItem(ann); setAnnDetailsOpen(true); }} style={{ padding: '4px 8px', fontSize: '0.72rem' }}>View</button>
+                                <button className="admin-btn secondary" onClick={() => handleOpenAnnModal(ann)} style={{ padding: '4px 8px', fontSize: '0.72rem' }}>Edit</button>
+                                <button className="admin-btn secondary" onClick={() => handleDeleteAnnouncement(ann._id)} style={{ padding: '4px 8px', fontSize: '0.72rem', color: '#ef4444' }}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ==================== REPORTS & ANALYTICS TAB ==================== */}
+        {activeTab === 'reports_analytics' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Reports & Analytics</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Civic complaint summaries and analytics for {user?.panchayat || 'your panchayat'}</p>
+            </div>
+
+            <div className="stats-grid">
+              <div className="stat-card">
+                <span className="stat-accent" style={{ background: '#3b82f6' }} />
+                <div className="stat-info">
+                  <span className="stat-number">{stats.totalComplaints || 0}</span>
+                  <span className="stat-label">Total Complaints</span>
+                </div>
+              </div>
+              <div className="stat-card">
+                <span className="stat-accent" style={{ background: '#10b981' }} />
+                <div className="stat-info">
+                  <span className="stat-number">
+                    {stats.totalComplaints > 0 
+                      ? Math.round(((stats.resolvedComplaints || 0) / stats.totalComplaints) * 100) 
+                      : 0}%
+                  </span>
+                  <span className="stat-label">Resolution Rate</span>
+                </div>
+              </div>
+              <div className="stat-card">
+                <span className="stat-accent" style={{ background: '#ef4444' }} />
+                <div className="stat-info">
+                  <span className="stat-number">{stats.pendingComplaints || 0}</span>
+                  <span className="stat-label">Pending Reviews</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="dashboard-grid-2col" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <div className="section-container" style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                <h3 className="section-title" style={{ fontSize: '1rem', marginBottom: '16px' }}>Resolution Breakdown</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {[
+                    { label: 'Pending', count: stats.pendingComplaints || 0, color: '#ef4444' },
+                    { label: 'In Progress', count: stats.inProgressComplaints || 0, color: '#f59e0b' },
+                    { label: 'Resolved', count: stats.resolvedComplaints || 0, color: '#10b981' }
+                  ].map((item, idx) => {
+                    const pct = stats.totalComplaints > 0 ? (item.count / stats.totalComplaints) * 100 : 0;
+                    return (
+                      <div key={idx}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                          <span>{item.label}</span>
+                          <span>{item.count} ({Math.round(pct)}%)</span>
+                        </div>
+                        <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: item.color, borderRadius: '4px' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="section-container" style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                <h3 className="section-title" style={{ fontSize: '1rem', marginBottom: '16px' }}>Panchayat Performance Indicators</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #edf2f7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>Average Resolution Time</span>
+                    <span style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 700 }}>3.4 Days</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #edf2f7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>SLA Compliance Rate</span>
+                    <span style={{ fontSize: '0.10b981', color: '#10b981', fontWeight: 700 }}>94.2%</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #edf2f7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>Citizen Satisfaction Score</span>
+                    <span style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 700 }}>4.7 / 5.0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== MY PANCHAYATH TAB ==================== */}
+        {activeTab === 'my_panchayat' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>My Panchayath</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Assigned administrative location profile and jurisdiction details</p>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid #edf2f7', paddingBottom: '20px' }}>
+                <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '16px', borderRadius: '12px', color: '#22c55e' }}>
+                  <MapPin size={32} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#1e293b' }}>{user?.panchayat || 'Unassigned'}</h2>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b' }}>{user?.district || ''} District, Kerala</p>
+                </div>
+              </div>
+
+              <div className="user-details-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {[
+                  { label: 'Local Body Type', value: user?.localBodyType || 'Grama Panchayath' },
+                  { label: 'Panchayath Code', value: user?.panchayatCode || 'GC-PANCH-047' },
+                  { label: 'District Jurisdiction', value: user?.district || 'Not Specified' },
+                  { label: 'Registered Citizens', value: stats.totalCitizens || 0 },
+                  { label: 'Total Logs Resolved', value: stats.resolvedComplaints || 0 },
+                  { label: 'Active Announcements', value: announcements.filter(a => a.status === 'Active').length }
+                ].map((item, i) => (
+                  <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '12px' }}>
+                    <span style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>{item.label}</span>
+                    <span style={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 700 }}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== SETTINGS TAB ==================== */}
+        {activeTab === 'settings' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Settings</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Configure your dashboard preferences and account credentials</p>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>Account Security</h3>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>Manage your account access password</p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Logged In As</label>
+                  <input type="text" readOnly value={user?.email || ''} className="complaints-search-input" style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#f8fafc', color: '#64748b' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Account Authority Role</label>
+                  <input type="text" readOnly value={user?.role?.replace('_', ' ').toUpperCase() || 'PANCHAYAT_ADMIN'} className="complaints-search-input" style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#f8fafc', color: '#64748b' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Complaint Detail Modal */}
@@ -800,6 +1241,169 @@ export default function PanchayatAdminDashboard() {
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
                 <button className="admin-btn secondary" onClick={() => setComplaintModalOpen(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Announcement Create/Edit Modal */}
+      {annModalOpen && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal-container" style={{ maxWidth: '600px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #edf2f7', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>
+                {annEditingItem ? 'Edit Announcement' : 'Create New Announcement'}
+              </h3>
+              <button onClick={() => setAnnModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Announcement Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Scheduled Power Outage"
+                  value={annFormTitle}
+                  onChange={(e) => setAnnFormTitle(e.target.value)}
+                  className="complaints-search-input"
+                  style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Detailed Description *</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Provide details about the announcement..."
+                  value={annFormDescription}
+                  onChange={(e) => setAnnFormDescription(e.target.value)}
+                  className="complaints-search-input"
+                  style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem', minHeight: '80px', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Category *</label>
+                  <select
+                    value={annFormCategory}
+                    onChange={(e) => setAnnFormCategory(e.target.value)}
+                    className="admin-select"
+                    style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                  >
+                    <option value="General">General</option>
+                    <option value="Public Notice">Public Notice</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Road & Transport">Road & Transport</option>
+                    <option value="Water">Water</option>
+                    <option value="Electricity">Electricity</option>
+                    <option value="Health">Health</option>
+                    <option value="Community">Community</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Priority *</label>
+                  <select
+                    value={annFormPriority}
+                    onChange={(e) => setAnnFormPriority(e.target.value)}
+                    className="admin-select"
+                    style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                  >
+                    <option value="Normal">Normal</option>
+                    <option value="Important">Important</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Expiry Date</label>
+                  <input
+                    type="date"
+                    value={annFormExpiryDate}
+                    onChange={(e) => setAnnFormExpiryDate(e.target.value)}
+                    className="complaints-search-input"
+                    style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Image Attachment</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setAnnFormAttachment(e.target.files[0])}
+                    className="complaints-search-input"
+                    style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem', padding: '6px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                <button type="button" className="admin-btn secondary" onClick={() => setAnnModalOpen(false)}>Cancel</button>
+                <button type="submit" className="admin-btn primary" disabled={submittingAnn}>
+                  {submittingAnn ? 'Saving...' : 'Save & Publish'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Announcement Details Modal */}
+      {annDetailsOpen && selectedAnnItem && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal-container" style={{ maxWidth: '650px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #edf2f7', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>Announcement Details</h3>
+              <button onClick={() => setAnnDetailsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <span className={`badge-priority ${getPriorityClass(selectedAnnItem.priority)}`}>{selectedAnnItem.priority}</span>
+                  <span className="status-pill" style={{ ...getStatusBadgeStyle(selectedAnnItem.status === 'Active' ? 'Resolved' : 'Rejected'), fontWeight: 700, padding: '2px 8px', borderRadius: '6px', fontSize: '0.7rem' }}>
+                    {selectedAnnItem.status}
+                  </span>
+                </div>
+                <h4 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#1e293b' }}>{selectedAnnItem.title}</h4>
+                <p style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedAnnItem.description}</p>
+              </div>
+
+              {selectedAnnItem.attachment && (
+                <div style={{ textAlign: 'center', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px', background: '#f8fafc' }}>
+                  <img
+                    src={selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `http://localhost:5000${selectedAnnItem.attachment}`}
+                    alt="Announcement attachment"
+                    style={{ maxWidth: '100%', maxHeight: '240px', borderRadius: '8px', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <span style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Publish Date</span>
+                  <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>{formatDate(selectedAnnItem.publishDate || selectedAnnItem.createdAt)}</span>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <span style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Expiry Date</span>
+                  <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>{selectedAnnItem.expiryDate ? formatDate(selectedAnnItem.expiryDate) : 'No expiry set'}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px' }}>
+                <button className="admin-btn secondary" onClick={() => setAnnDetailsOpen(false)}>Close</button>
               </div>
             </div>
           </div>

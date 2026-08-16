@@ -12,7 +12,8 @@ const createNotification = async ({
   type = 'Information',
   relatedComplaint = null,
   relatedAnnouncement = null,
-  districtTarget = 'ALL'
+  districtTarget = 'ALL',
+  panchayatTarget = 'ALL'
 }) => {
   try {
     const notification = await Notification.create({
@@ -23,7 +24,8 @@ const createNotification = async ({
       type,
       relatedComplaint,
       relatedAnnouncement,
-      districtTarget
+      districtTarget,
+      panchayatTarget
     });
 
     // Populate related complaint details if available
@@ -43,12 +45,13 @@ const createNotification = async ({
         isRecipient = true;
       }
 
-      // Match recipient role and district targeting if recipientUser is NOT specified
+      // Match recipient role, district, and panchayat targeting if recipientUser is NOT specified
       if (!recipientUser) {
         const matchesRole = (
           recipientRole.toLowerCase() === client.role ||
           (recipientRole.toLowerCase() === 'admin' && client.role === 'admin') ||
-          (recipientRole.toLowerCase() === 'citizen' && client.role === 'citizen')
+          (recipientRole.toLowerCase() === 'citizen' && client.role === 'citizen') ||
+          (recipientRole.toLowerCase() === 'panchayat_admin' && client.role === 'panchayat_admin')
         );
 
         const matchesDistrict = (
@@ -57,7 +60,13 @@ const createNotification = async ({
           client.district === districtTarget
         );
 
-        if (matchesRole && matchesDistrict) {
+        const matchesPanchayat = (
+          !panchayatTarget ||
+          panchayatTarget === 'ALL' ||
+          client.panchayat === panchayatTarget
+        );
+
+        if (matchesRole && matchesDistrict && matchesPanchayat) {
           isRecipient = true;
         }
       }

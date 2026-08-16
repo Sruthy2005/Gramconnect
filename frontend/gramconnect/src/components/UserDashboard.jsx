@@ -7,9 +7,11 @@ import api from '../utils/api';
 import ProfilePage from './ProfilePage';
 import ReportIssuePage from './ReportIssuePage';
 import MyComplaintsPage from './MyComplaintsPage';
+import ComplaintStatusPage from './ComplaintStatusPage';
 import UserCommunityHub from './CommunityHub/UserCommunityHub';
 import UserLostFound from './UserLostFound';
 import UserAnnouncements from './UserAnnouncements';
+import SettingsPage from './SettingsPage';
 import './UserDashboard.css';
 
 export default function UserDashboard() {
@@ -839,8 +841,10 @@ export default function UserDashboard() {
           <ProfilePage onLogout={handleLogout} onUserUpdate={(updatedUser) => setUser(updatedUser)} />
         ) : activeTab === 'report' ? (
           <ReportIssuePage onNavigate={(tab) => setActiveTab(tab)} />
-        ) : activeTab === 'complaints' || activeTab === 'status' ? (
+        ) : activeTab === 'complaints' ? (
           <MyComplaintsPage />
+        ) : activeTab === 'status' ? (
+          <ComplaintStatusPage />
         ) : activeTab === 'notifications' ? (
           renderNotificationsPage(false)
         ) : activeTab === 'hub' ? (
@@ -849,6 +853,8 @@ export default function UserDashboard() {
           <UserLostFound />
         ) : activeTab === 'announcements' ? (
           <UserAnnouncements />
+        ) : activeTab === 'settings' ? (
+          <SettingsPage />
         ) : (
           <>
             {/* Section 1: Welcome Header Card & Profile Summary Card (Requirement 4) */}
