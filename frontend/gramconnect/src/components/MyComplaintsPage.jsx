@@ -870,9 +870,9 @@ export default function MyComplaintsPage() {
                     className="btn-modal-action print-btn"
                     onClick={(e) => handleDownloadPDF(selectedComplaint, e)}
                     style={{
-                      background: '#f1f5f9',
-                      color: 'var(--text-dark)',
-                      border: '1px solid #cbd5e1',
+                      background: 'var(--card-inner)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
                       height: '40px',
                       borderRadius: '12px',
                       fontSize: '0.85rem',
@@ -988,7 +988,7 @@ export default function MyComplaintsPage() {
                   onClick={() => setEditingComplaint(null)} 
                   className="btn-edit-cancel"
                   disabled={isSubmittingEdit}
-                  style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', color: 'var(--text-dark)', padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+                  style={{ background: 'var(--card-inner)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
                 >
                   Cancel
                 </button>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Globe, ChevronDown, User, Cpu, Users, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle, Menu, Bell, PlusCircle, Search, FileText, LayoutDashboard, Megaphone, Settings, LogOut, Calendar, Info, AlertCircle, Trash2, Check, CheckCheck, ArrowRight } from 'lucide-react';
+import { Globe, ChevronDown, User, Cpu, Users, UserCheck, CheckCircle, Mail, Lock, Eye, EyeOff, LogIn, Phone, Shield, AlertTriangle, Menu, Bell, PlusCircle, Search, FileText, LayoutDashboard, Megaphone, Settings, LogOut, Calendar, Info, AlertCircle, Trash2, Check, CheckCheck, ArrowRight, Sun, Moon, Tag, Activity, ShieldCheck } from 'lucide-react';
 import { GramConnectIcon } from './GramConnectLogo';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
@@ -17,6 +17,22 @@ import './UserDashboard.css';
 export default function UserDashboard() {
   const { t, i18n } = useTranslation();
   const { user, setUser, logout: handleLogout } = useAuth();
+
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('admin-theme') || 'Light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('admin-theme', theme);
+    const rootElement = document.documentElement;
+    if (theme === 'Dark') {
+      rootElement.classList.add('dark-theme');
+      rootElement.classList.remove('light-theme');
+    } else {
+      rootElement.classList.add('light-theme');
+      rootElement.classList.remove('dark-theme');
+    }
+  }, [theme]);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -516,249 +532,30 @@ export default function UserDashboard() {
       {/* Mobile Sidebar backdrop */}
       <div className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
 
-      {/* Fixed Top Navbar */}
-      <header className="dash-navbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle Navigation">
-            <Menu size={22} />
-          </button>
+      {/* Floating Mobile Hamburger */}
+      <button className="hamburger-btn mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle Sidebar">
+        <Menu size={24} />
+      </button>
 
-          <a href="#home" className="brand-section dash-navbar-brand">
-            <div className="brand-logo">
-              <GramConnectIcon className="logo-icon" />
-              <span className="text-gradient-green">Gram</span>
-              <span className="text-gradient-blue">Connect</span>
+      {/* Sidebar Navigation */}
+      <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        {/* Brand/Logo at the top of the sidebar */}
+        <div className="sidebar-brand-wrapper">
+          <a href="#dashboard" className="sidebar-brand" onClick={() => setSidebarOpen(false)}>
+            <GramConnectIcon size={32} />
+            <div className="brand-text-container">
+              <span className="brand-name">GramConnect</span>
+              <span className="brand-badge">Citizen Portal</span>
             </div>
           </a>
         </div>
 
-        <div className="dash-nav-actions">
-          {/* Notification bell */}
-          <div className="notifications-bell-wrapper" ref={notificationsDropdownRef} style={{ position: 'relative' }}>
-            <button
-              className="btn-nav-action"
-              aria-label="View notifications"
-              onClick={handleToggleNotifications}
-              style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Bell size={20} />
-              {unreadNotificationsCount > 0 && (
-                <span className="notification-badge" style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: '#ffffff', width: '16px', height: '16px', borderRadius: '50%', fontSize: '0.62rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                  {unreadNotificationsCount}
-                </span>
-              )}
-            </button>
-
-            {/* Notifications Dropdown Overlay */}
-            {notificationsDropdownOpen && (
-              <div className="notifications-dropdown-menu" style={{ position: 'absolute', top: '48px', right: 0, background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1020, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '320px', maxWidth: '360px' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #edf2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-dark)' }}>Notifications</span>
-                  {unreadNotificationsCount > 0 && (
-                    <button 
-                      onClick={handleMarkAllAsRead} 
-                      style={{ fontSize: '0.75rem', color: 'var(--primary)', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700 }}
-                    >
-                      Mark all as read
-                    </button>
-                  )}
-                </div>
-                
-                <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                  {loadingNotifications ? (
-                    <div style={{ padding: '32px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ width: '20px', height: '20px', border: '2px solid var(--primary)', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading notifications...</span>
-                    </div>
-                  ) : notifications.length === 0 ? (
-                    <div style={{ padding: '32px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <CheckCircle size={32} style={{ color: '#10b981', opacity: 0.8 }} />
-                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>No Notifications Yet</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>You're all caught up.</span>
-                    </div>
-                  ) : (
-                    notifications.slice(0, 8).map((n) => {
-                      const IconComponent = n.type === 'Success' ? CheckCircle 
-                                          : n.type === 'Warning' ? AlertTriangle 
-                                          : n.type === 'Error' ? AlertCircle 
-                                          : Info;
-                      const iconColor = n.type === 'Success' ? '#10b981' 
-                                      : n.type === 'Warning' ? '#f59e0b' 
-                                      : n.type === 'Error' ? '#ef4444' 
-                                      : '#3b82f6';
-                      
-                      return (
-                        <div 
-                          key={n._id} 
-                          onClick={() => {
-                            handleMarkAsRead(n._id);
-                            setNotificationsDropdownOpen(false);
-                            if (n.relatedComplaint) {
-                              const compId = typeof n.relatedComplaint === 'object' ? n.relatedComplaint._id : n.relatedComplaint;
-                              window.location.hash = `#dashboard/my-complaints?id=${compId}`;
-                            }
-                          }}
-                          style={{ 
-                            padding: '12px 16px', 
-                            borderBottom: '1px solid #edf2f7', 
-                            display: 'flex', 
-                            gap: '12px', 
-                            background: n.isRead ? 'transparent' : '#f0fdf4', 
-                            transition: 'all 0.15s ease',
-                            cursor: 'pointer',
-                            alignItems: 'flex-start',
-                            position: 'relative'
-                          }}
-                          className="notification-card-item"
-                        >
-                          <div style={{ marginTop: '2px', color: iconColor }}>
-                            <IconComponent size={16} />
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, paddingRight: '12px' }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)', fontWeight: 700 }}>
-                              {n.title}
-                            </span>
-                            <span style={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.4 }}>
-                              {n.message}
-                            </span>
-                            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                              {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-                            {!n.isRead && (
-                              <span style={{ width: '6px', height: '6px', background: '#3b82f6', borderRadius: '50%' }} />
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteNotification(n._id);
-                              }}
-                              style={{ 
-                                border: 'none', 
-                                background: 'none', 
-                                color: '#9ca3af', 
-                                cursor: 'pointer',
-                                padding: '2px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                              title="Delete notification"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* View All Notifications Link */}
-                <div style={{ padding: '10px 16px', borderTop: '1px solid #edf2f7', textAlign: 'center', background: '#f8fafc' }}>
-                  <button
-                    onClick={() => {
-                      window.location.hash = '#dashboard/notifications';
-                      setNotificationsDropdownOpen(false);
-                    }}
-                    style={{ color: 'var(--primary)', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    View All Notifications <ArrowRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Language Switcher */}
-          <div className="lang-switcher-wrapper" ref={dropdownRef}>
-            <button
-              className="lang-dropdown-btn"
-              onClick={() => setLangDropdownOpen(!langDropdownOpen)}
-              aria-label="Change Language"
-            >
-              <Globe size={16} className="lang-icon" />
-              <span style={{ fontSize: '0.8rem' }}>Language</span>
-              <ChevronDown size={11} style={{ transform: langDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'var(--transition-fast)' }} />
-            </button>
-            <div className={`lang-dropdown-menu ${langDropdownOpen ? 'open' : ''}`} style={{ top: '46px' }}>
-              <button
-                onClick={() => changeLanguage('en')}
-                className={`lang-option ${i18n.language === 'en' ? 'active' : ''}`}
-              >
-                English
-              </button>
-              <button
-                onClick={() => changeLanguage('ml')}
-                className={`lang-option ${i18n.language === 'ml' ? 'active' : ''}`}
-              >
-                മലയാളം
-              </button>
-            </div>
-          </div>
-
-          {/* User profile identifier */}
-          <div className="nav-user-profile" ref={avatarDropdownRef} style={{ position: 'relative' }}>
-            <button
-              className="navbar-avatar-btn"
-              onClick={() => setAvatarDropdownOpen(!avatarDropdownOpen)}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
-            >
-              {user.profilePicture ? (
-                <img src={user.profilePicture} alt="User Avatar" className="navbar-avatar-img" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <div className="avatar-placeholder">
-                  {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
-                </div>
-              )}
-              <div className="nav-user-info" style={{ display: 'none' /* Hidden on small screens, shown in css */ }}>
-                <span className="nav-user-name">{user.fullName}</span>
-                <span className="nav-user-role">{t('hero.citizen')}</span>
-              </div>
-            </button>
-
-            {/* Action Dropdown Menu */}
-            {avatarDropdownOpen && (
-              <div className="avatar-dropdown-menu" style={{ position: 'absolute', top: '48px', right: 0, background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1020, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '160px' }}>
-                <button
-                  className="dropdown-item"
-                  onClick={() => { window.location.hash = '#dashboard/profile'; setAvatarDropdownOpen(false); }}
-                  style={{ padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#1f2937', fontWeight: 600, fontSize: '0.82rem', width: '100%', transition: 'all 0.15s ease' }}
-                >
-                  <User size={14} style={{ color: '#4b5563' }} />
-                  <span>My Profile</span>
-                </button>
-                <button
-                  className="dropdown-item"
-                  onClick={() => { window.location.hash = '#dashboard/settings'; setAvatarDropdownOpen(false); }}
-                  style={{ padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#1f2937', fontWeight: 600, fontSize: '0.82rem', width: '100%', transition: 'all 0.15s ease' }}
-                >
-                  <Settings size={14} style={{ color: '#4b5563' }} />
-                  <span>Settings</span>
-                </button>
-                <button
-                  className="dropdown-item logout"
-                  onClick={() => { handleLogout(); setAvatarDropdownOpen(false); }}
-                  style={{ padding: '12px 16px', background: '#fee2e2', border: 'none', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: 700, fontSize: '0.82rem', width: '100%', transition: 'all 0.15s ease' }}
-                >
-                  <LogOut size={14} />
-                  <span>Logout</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Left Sidebar Menu */}
-      <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <nav className="sidebar-menu">
+        <div className="sidebar-menu">
           <button
             className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard'; setSidebarOpen(false); }}
           >
-            <LayoutDashboard size={18} />
+            <LayoutDashboard size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.dashboard')}</span>
           </button>
 
@@ -766,7 +563,7 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'report' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/report-issue'; setSidebarOpen(false); }}
           >
-            <PlusCircle size={18} />
+            <PlusCircle size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.report_issue')}</span>
           </button>
 
@@ -774,7 +571,7 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'complaints' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/my-complaints'; setSidebarOpen(false); }}
           >
-            <FileText size={18} />
+            <FileText size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.my_complaints')}</span>
           </button>
 
@@ -782,7 +579,7 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'status' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/status'; setSidebarOpen(false); }}
           >
-            <Search size={18} />
+            <Search size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.complaint_status')}</span>
           </button>
 
@@ -790,7 +587,7 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'hub' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/hub'; setSidebarOpen(false); }}
           >
-            <Users size={18} />
+            <Users size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.community_hub')}</span>
           </button>
 
@@ -798,7 +595,7 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'lost_found' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/lost-found'; setSidebarOpen(false); }}
           >
-            <Info size={18} />
+            <Info size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.lost_found')}</span>
           </button>
 
@@ -806,15 +603,31 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'announcements' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/announcements'; setSidebarOpen(false); }}
           >
-            <Megaphone size={18} />
+            <Megaphone size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.announcements')}</span>
+          </button>
+
+          <button
+            className={`sidebar-item ${activeTab === 'notifications' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#dashboard/notifications'; setSidebarOpen(false); }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Bell size={18} strokeWidth={1.8} />
+              <span>Notifications</span>
+            </div>
+            {unreadNotificationsCount > 0 && (
+              <span className="sidebar-notification-badge-count">
+                {unreadNotificationsCount}
+              </span>
+            )}
           </button>
 
           <button
             className={`sidebar-item ${activeTab === 'profile' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/profile'; setSidebarOpen(false); }}
           >
-            <User size={18} />
+            <User size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.profile')}</span>
           </button>
 
@@ -822,15 +635,70 @@ export default function UserDashboard() {
             className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#dashboard/settings'; setSidebarOpen(false); }}
           >
-            <Settings size={18} />
+            <Settings size={18} strokeWidth={1.8} />
             <span>{t('dashboard.menu.settings')}</span>
           </button>
-        </nav>
+        </div>
 
+        {/* Sidebar Footer containing Language, Theme Toggle, Profile Card and Logout */}
         <div className="sidebar-footer">
-          <button className="btn-sidebar-logout" onClick={handleLogout}>
-            <LogOut size={18} />
-            <span>{t('dashboard.menu.logout')}</span>
+          {/* User Profile Card */}
+          <div className="sidebar-profile-card">
+            {user?.profilePicture ? (
+              <img
+                src={user.profilePicture}
+                alt={user.fullName}
+                style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary-light)' }}
+              />
+            ) : (
+              <div className="sidebar-avatar-placeholder">
+                {(user?.fullName || 'C').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="sidebar-profile-details">
+              <span className="sidebar-profile-name">{user?.fullName || 'Citizen User'}</span>
+              <span className="sidebar-profile-role">{user?.role || 'Citizen'}</span>
+            </div>
+          </div>
+
+          {/* Language Switcher */}
+          <div className="sidebar-theme-toggle" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', marginBottom: '10px' }}>
+            <div className="toggle-label">
+              <Globe size={16} strokeWidth={1.8} />
+              <span>Language</span>
+            </div>
+            <button
+              className="theme-switch-btn"
+              style={{ width: 'auto', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', background: 'var(--card-inner)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer' }}
+              onClick={() => changeLanguage(i18n.language === 'en' ? 'ml' : 'en')}
+              type="button"
+            >
+              {i18n.language === 'en' ? 'ML' : 'EN'}
+            </button>
+          </div>
+
+          {/* Light/Dark Mode toggle */}
+          <div className="sidebar-theme-toggle">
+            <div className="toggle-label">
+              {theme === 'Dark' ? <Moon size={16} strokeWidth={1.8} /> : <Sun size={16} strokeWidth={1.8} />}
+              <span>{theme === 'Dark' ? 'Dark Mode' : 'Light Mode'}</span>
+            </div>
+            <button
+              className="theme-switch-btn"
+              onClick={() => {
+                const newTheme = theme === 'Dark' ? 'Light' : 'Dark';
+                setTheme(newTheme);
+              }}
+              aria-label="Toggle Theme"
+              type="button"
+            >
+              <div className={`theme-switch-thumb ${theme === 'Dark' ? 'dark' : ''}`} />
+            </button>
+          </div>
+
+          <button className="btn-sidebar-logout" onClick={handleLogout} type="button">
+            <LogOut size={18} strokeWidth={1.8} />
+            <span>Log Out</span>
           </button>
         </div>
       </aside>
@@ -890,7 +758,7 @@ export default function UserDashboard() {
               </div>
 
               {/* Profile Summary Card */}
-              <div className="welcome-card" style={{ margin: 0, background: 'rgba(255, 255, 255, 0.8)', border: '1px solid rgba(229, 231, 235, 0.8)' }}>
+              <div className="welcome-card" style={{ margin: 0, background: 'var(--card-bg)', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
                   {user.profilePicture ? (
                     <img
@@ -912,11 +780,11 @@ export default function UserDashboard() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', fontSize: '0.82rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #edf2f7', paddingBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Address:</span>
                     <span style={{ color: 'var(--text-dark)', fontWeight: 700, textAlign: 'right' }}>{user.address || '(not configured)'}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #edf2f7', paddingBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Login Method:</span>
                     <span style={{ color: 'var(--text-dark)', fontWeight: 700, textTransform: 'capitalize' }}>{user.authProvider} Account</span>
                   </div>

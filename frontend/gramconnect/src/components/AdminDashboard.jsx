@@ -43,7 +43,9 @@ import {
   Save,
   AlertCircle,
   Info,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GramConnectIcon } from './GramConnectLogo';
@@ -67,8 +69,35 @@ const getLocationsByDistrictAndType = (district, type) => {
 };
 
 export default function AdminDashboard() {
-  const { t } = useTranslation();
   const { user, logout: handleLogout } = useAuth();
+
+  const getTabTitle = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return 'Dashboard Summary';
+      case 'complaints':
+      case 'complaint-details':
+        return 'Complaint Management';
+      case 'users':
+        return 'Users Management';
+      case 'community':
+        return 'Community Hub';
+      case 'lost_found':
+        return 'Lost & Found Reports';
+      case 'announcements':
+        return 'Announcements';
+      case 'panchayat_admins':
+        return 'Local Panchayat Admins';
+      case 'analytics':
+        return 'Analytics Dashboard';
+      case 'settings':
+        return 'System Settings';
+      case 'notifications':
+        return 'System Notifications';
+      default:
+        return 'Admin Dashboard';
+    }
+  };
 
   // Component states
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -217,7 +246,7 @@ export default function AdminDashboard() {
   const [settingsProfileName, setSettingsProfileName] = useState('');
   const [settingsProfileEmail, setSettingsProfileEmail] = useState('');
   const [settingsProfileMobile, setSettingsProfileMobile] = useState('');
-  
+
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState('');
   const [settingsNewPassword, setSettingsNewPassword] = useState('');
   const [settingsConfirmPassword, setSettingsConfirmPassword] = useState('');
@@ -243,11 +272,26 @@ export default function AdminDashboard() {
     weeklyReports: false
   });
 
-  const [settingsSystem, setSettingsSystem] = useState({
-    language: 'English',
-    theme: 'Light',
-    maintenanceMode: false
+  const [settingsSystem, setSettingsSystem] = useState(() => {
+    const savedTheme = localStorage.getItem('admin-theme') || 'Light';
+    return {
+      language: 'English',
+      theme: savedTheme,
+      maintenanceMode: false
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('admin-theme', settingsSystem.theme);
+    const rootElement = document.documentElement;
+    if (settingsSystem.theme === 'Dark') {
+      rootElement.classList.add('dark-theme');
+      rootElement.classList.remove('light-theme');
+    } else {
+      rootElement.classList.add('light-theme');
+      rootElement.classList.remove('dark-theme');
+    }
+  }, [settingsSystem.theme]);
 
   useEffect(() => {
     if (user) {
@@ -1250,9 +1294,9 @@ export default function AdminDashboard() {
                   padding: '6px 12px',
                   borderRadius: '20px',
                   border: '1px solid',
-                  borderColor: notifFilter === opt ? '#3b82f6' : '#e2e8f0',
-                  background: notifFilter === opt ? '#eff6ff' : '#ffffff',
-                  color: notifFilter === opt ? '#3b82f6' : '#64748b',
+                  borderColor: notifFilter === opt ? 'var(--primary)' : 'var(--border-color)',
+                  background: notifFilter === opt ? 'var(--primary-light)' : 'var(--bg-card)',
+                  color: notifFilter === opt ? 'var(--primary)' : 'var(--text-muted)',
                   fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -1284,7 +1328,7 @@ export default function AdminDashboard() {
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Loading your notifications...</span>
           </div>
         ) : filteredNotifs.length === 0 ? (
-          <div style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+          <div style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: 'var(--bg-card-hover)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
             <span style={{ fontSize: '2.5rem' }}>🔔</span>
             <h3 style={{ margin: 0, fontWeight: 800, color: 'var(--text-dark)' }}>No Notifications</h3>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>You're all caught up.</p>
@@ -1319,8 +1363,8 @@ export default function AdminDashboard() {
                   style={{
                     padding: '16px 20px',
                     borderRadius: '12px',
-                    border: '1px solid #edf2f7',
-                    background: n.isRead ? '#ffffff' : '#f0fdf4',
+                    border: '1px solid var(--border-color)',
+                    background: n.isRead ? 'var(--bg-card)' : 'var(--card-inner)',
                     display: 'flex',
                     gap: '16px',
                     alignItems: 'center',
@@ -1351,7 +1395,7 @@ export default function AdminDashboard() {
                         {new Date(n.createdAt).toLocaleDateString()} {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {compId && (
-                        <span style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
+                        <span style={{ fontSize: '0.7rem', background: 'var(--bg-card-hover)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
                           ID: {compId}
                         </span>
                       )}
@@ -1512,21 +1556,36 @@ export default function AdminDashboard() {
 
   // Helper: status badge color mapper
   const getStatusBadgeStyle = (status) => {
+    const isDark = settingsSystem.theme === 'Dark';
     switch (status) {
       case 'Pending':
-        return { backgroundColor: '#fee2e2', color: '#ef4444' };
+        return isDark
+          ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#FF8A8A', border: '1px solid rgba(239, 68, 68, 0.25)' }
+          : { backgroundColor: '#fee2e2', color: '#ef4444' };
       case 'Verified':
-        return { backgroundColor: '#eff6ff', color: '#2563eb' };
+        return isDark
+          ? { backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60A5FA', border: '1px solid rgba(59, 130, 246, 0.25)' }
+          : { backgroundColor: '#eff6ff', color: '#2563eb' };
       case 'Assigned':
-        return { backgroundColor: '#fdf2f8', color: '#db2777' };
+        return isDark
+          ? { backgroundColor: 'rgba(219, 39, 119, 0.15)', color: '#f472b6', border: '1px solid rgba(219, 39, 119, 0.25)' }
+          : { backgroundColor: '#fdf2f8', color: '#db2777' };
       case 'In Progress':
-        return { backgroundColor: '#fef3c7', color: '#d97706' };
+        return isDark
+          ? { backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#FBBF24', border: '1px solid rgba(245, 158, 11, 0.25)' }
+          : { backgroundColor: '#fef3c7', color: '#d97706' };
       case 'Resolved':
-        return { backgroundColor: '#d1fae5', color: '#059669' };
+        return isDark
+          ? { backgroundColor: 'rgba(34, 197, 94, 0.15)', color: '#4ADE80', border: '1px solid rgba(34, 197, 94, 0.25)' }
+          : { backgroundColor: '#d1fae5', color: '#059669' };
       case 'Rejected':
-        return { backgroundColor: '#f3f4f6', color: '#374151' };
+        return isDark
+          ? { backgroundColor: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', border: '1px solid rgba(107, 114, 128, 0.25)' }
+          : { backgroundColor: '#f3f4f6', color: '#374151' };
       default:
-        return { backgroundColor: '#f1f5f9', color: '#475569' };
+        return isDark
+          ? { backgroundColor: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', border: '1px solid rgba(107, 114, 128, 0.25)' }
+          : { backgroundColor: '#f1f5f9', color: 'var(--text-secondary)' };
     }
   };
 
@@ -1738,7 +1797,7 @@ export default function AdminDashboard() {
   const barChartData = getCategoryBars();
 
   return (
-    <div className="dashboard-wrapper">
+    <div className={`admin-dashboard-wrapper theme-${settingsSystem.theme.toLowerCase()}`}>
       {/* Dynamic Toast Alerts Container */}
       <div className="toasts-container">
         {toasts.map((toast) => (
@@ -1749,281 +1808,161 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Top Header */}
-      <header className="dash-navbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <Menu size={24} />
-          </button>
-          <a href="/#admin" className="dash-navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <GramConnectIcon size={32} />
-            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-dark)', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              GramConnect <span style={{ fontSize: '0.68rem', background: '#3b82f6', color: '#ffffff', padding: '2px 8px', borderRadius: '99px', verticalAlign: 'middle', textTransform: 'uppercase', fontWeight: 700 }}>Admin Console</span>
-            </span>
-          </a>
-        </div>
-
-        {/* Profile menu */}
-        <div className="dash-nav-actions">
-          <div style={{ position: 'relative' }} ref={notificationsDropdownRef}>
-            <button
-              className="btn-nav-action"
-              onClick={handleToggleNotifications}
-              style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Bell size={20} />
-              {unreadNotificationsCount > 0 && (
-                <span className="notification-badge" style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: '#ffffff', width: '16px', height: '16px', borderRadius: '50%', fontSize: '0.62rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                  {unreadNotificationsCount}
-                </span>
-              )}
-            </button>
-
-            {/* Admin Notifications Dropdown */}
-            {notificationsDropdownOpen && (
-              <div className="notifications-dropdown-menu" style={{ position: 'absolute', top: '48px', right: 0, background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1020, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '320px', maxWidth: '360px' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #edf2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-dark)' }}>Admin Notifications</span>
-                  {unreadNotificationsCount > 0 && (
-                    <button
-                      onClick={handleMarkAllAsRead}
-                      style={{ fontSize: '0.75rem', color: '#3b82f6', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700 }}
-                    >
-                      Mark all as read
-                    </button>
-                  )}
-                </div>
-
-                <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                  {loadingNotifications ? (
-                    <div style={{ padding: '32px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ width: '20px', height: '20px', border: '2px solid #3b82f6', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading notifications...</span>
-                    </div>
-                  ) : notifications.length === 0 ? (
-                    <div style={{ padding: '32px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <CheckCircle size={32} style={{ color: '#10b981', opacity: 0.8 }} />
-                      <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>No Notifications Yet</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>You're all caught up.</span>
-                    </div>
-                  ) : (
-                    notifications.slice(0, 8).map((n) => {
-                      const IconComponent = n.type === 'Success' ? CheckCircle
-                        : n.type === 'Warning' ? AlertTriangle
-                          : n.type === 'Error' ? AlertCircle
-                            : Info;
-                      const iconColor = n.type === 'Success' ? '#10b981'
-                        : n.type === 'Warning' ? '#f59e0b'
-                          : n.type === 'Error' ? '#ef4444'
-                            : '#3b82f6';
-
-                      return (
-                        <div
-                          key={n._id}
-                          onClick={() => {
-                            handleMarkAsRead(n._id);
-                            setNotificationsDropdownOpen(false);
-                            if (n.relatedComplaint) {
-                              const compId = typeof n.relatedComplaint === 'object' ? n.relatedComplaint._id : n.relatedComplaint;
-                              window.location.hash = `#admin/complaints/${compId}`;
-                            }
-                          }}
-                          style={{
-                            padding: '12px 16px',
-                            borderBottom: '1px solid #edf2f7',
-                            display: 'flex',
-                            gap: '12px',
-                            background: n.isRead ? 'transparent' : '#f0fdf4',
-                            transition: 'all 0.15s ease',
-                            cursor: 'pointer',
-                            alignItems: 'flex-start',
-                            position: 'relative'
-                          }}
-                          className="notification-card-item"
-                        >
-                          <div style={{ marginTop: '2px', color: iconColor }}>
-                            <IconComponent size={16} />
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, paddingRight: '12px' }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)', fontWeight: 700 }}>
-                              {n.title}
-                            </span>
-                            <span style={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.4 }}>
-                              {n.message}
-                            </span>
-                            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                              {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(n.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-                            {!n.isRead && (
-                              <span style={{ width: '6px', height: '6px', background: '#3b82f6', borderRadius: '50%' }} />
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteNotification(n._id);
-                              }}
-                              style={{
-                                border: 'none',
-                                background: 'none',
-                                color: '#9ca3af',
-                                cursor: 'pointer',
-                                padding: '2px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                              title="Delete notification"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* View All Notifications Link */}
-                <div style={{ padding: '10px 16px', borderTop: '1px solid #edf2f7', textAlign: 'center', background: '#f8fafc' }}>
-                  <button
-                    onClick={() => {
-                      window.location.hash = '#admin/notifications';
-                      setNotificationsDropdownOpen(false);
-                    }}
-                    style={{ color: '#3b82f6', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    View All Notifications <ArrowRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={{ position: 'relative' }} ref={dropdownRef}>
-            <div className="nav-user-profile" style={{ cursor: 'pointer' }} onClick={() => setAvatarDropdownOpen(!avatarDropdownOpen)}>
-              {user?.profilePicture ? (
-                <img
-                  src={user.profilePicture}
-                  alt={user.fullName}
-                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary-light)' }}
-                />
-              ) : (
-                <div className="avatar-placeholder" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' }}>
-                  {(user?.fullName || 'A').charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="nav-user-info">
-                <span className="nav-user-name">{user?.fullName || 'Panchayat Admin'}</span>
-                <span className="nav-user-role" style={{ color: '#3b82f6', textTransform: 'capitalize' }}>
-                  {user?.role || 'Panchayat Administrator'}
-                </span>
-              </div>
-              <ChevronDown size={14} style={{ color: '#94a3b8' }} />
-            </div>
-
-            {avatarDropdownOpen && (
-              <div className="avatar-dropdown-menu" style={{
-                position: 'absolute',
-                top: '55px',
-                right: 0,
-                width: '200px',
-                background: '#ffffff',
-                border: '1px solid rgba(229, 231, 235, 0.8)',
-                borderRadius: '16px',
-                boxShadow: '0 15px 30px rgba(0,0,0,0.08)',
-                zIndex: 1100,
-                overflow: 'hidden',
-                padding: '4px',
-                animation: 'fadeIn 0.15s ease-out'
-              }}>
-                <button
-                  onClick={handleLogout}
-                  className="dropdown-item logout"
-                  style={{ width: '100%', padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '0.85rem', fontWeight: 700, color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <LogOut size={16} /> Log Out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      {/* Floating Mobile Hamburger */}
+      <button className="hamburger-btn mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle Sidebar">
+        <Menu size={24} />
+      </button>
 
       {/* Sidebar Navigation */}
       <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        {/* Brand/Logo at the top of the sidebar */}
+        <div className="sidebar-brand-wrapper">
+          <a href="/#admin" className="sidebar-brand" onClick={() => setSidebarOpen(false)}>
+            <GramConnectIcon size={32} />
+            <div className="brand-text-container">
+              <span className="brand-name">GramConnect</span>
+              <span className="brand-badge">Admin Console</span>
+            </div>
+          </a>
+        </div>
+
         <div className="sidebar-menu">
           <button
             className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin'; setActiveTab('dashboard'); }}
+            onClick={() => { window.location.hash = '#admin'; setActiveTab('dashboard'); setSidebarOpen(false); }}
           >
-            <LayoutDashboard size={18} />
+            <LayoutDashboard size={18} strokeWidth={1.8} />
             <span>Dashboard</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'complaints' || activeTab === 'complaint-details' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/complaints'; setActiveTab('complaints'); }}
+            onClick={() => { window.location.hash = '#admin/complaints'; setActiveTab('complaints'); setSidebarOpen(false); }}
           >
-            <AlertTriangle size={18} />
+            <AlertTriangle size={18} strokeWidth={1.8} />
             <span>Complaints</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'users' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/users'; setActiveTab('users'); }}
+            onClick={() => { window.location.hash = '#admin/users'; setActiveTab('users'); setSidebarOpen(false); }}
           >
-            <Users size={18} />
+            <Users size={18} strokeWidth={1.8} />
             <span>Users</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'community' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/community'; setActiveTab('community'); }}
+            onClick={() => { window.location.hash = '#admin/community'; setActiveTab('community'); setSidebarOpen(false); }}
           >
-            <Activity size={18} />
+            <Activity size={18} strokeWidth={1.8} />
             <span>Community Hub</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'lost_found' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/lost-found'; setActiveTab('lost_found'); }}
+            onClick={() => { window.location.hash = '#admin/lost-found'; setActiveTab('lost_found'); setSidebarOpen(false); }}
           >
-            <Tag size={18} />
+            <Tag size={18} strokeWidth={1.8} />
             <span>Lost & Found</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'announcements' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/announcements'; setActiveTab('announcements'); }}
+            onClick={() => { window.location.hash = '#admin/announcements'; setActiveTab('announcements'); setSidebarOpen(false); }}
           >
-            <Megaphone size={18} />
+            <Megaphone size={18} strokeWidth={1.8} />
             <span>Announcements</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'panchayat_admins' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/panchayat-admins'; setActiveTab('panchayat_admins'); }}
+            onClick={() => { window.location.hash = '#admin/panchayat-admins'; setActiveTab('panchayat_admins'); setSidebarOpen(false); }}
           >
-            <ShieldCheck size={18} />
+            <ShieldCheck size={18} strokeWidth={1.8} />
             <span>Add Local Admin</span>
           </button>
           <button
             className={`sidebar-item ${activeTab === 'analytics' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/analytics'; setActiveTab('analytics'); }}
+            onClick={() => { window.location.hash = '#admin/analytics'; setActiveTab('analytics'); setSidebarOpen(false); }}
           >
-            <TrendingUp size={18} />
+            <TrendingUp size={18} strokeWidth={1.8} />
             <span>Analytics</span>
           </button>
           <button
-            className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => { window.location.hash = '#admin/settings'; setActiveTab('settings'); }}
+            className={`sidebar-item ${activeTab === 'notifications' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/notifications'; setActiveTab('notifications'); setSidebarOpen(false); }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
           >
-            <SettingsIcon size={18} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Bell size={18} strokeWidth={1.8} />
+              <span>Notifications</span>
+            </div>
+            {unreadNotificationsCount > 0 && (
+              <span className="sidebar-notification-badge-count">
+                {unreadNotificationsCount}
+              </span>
+            )}
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/settings'; setActiveTab('settings'); setSidebarOpen(false); }}
+          >
+            <SettingsIcon size={18} strokeWidth={1.8} />
             <span>Settings</span>
           </button>
         </div>
 
+        {/* Sidebar Footer containing Theme Toggle and Logout */}
         <div className="sidebar-footer">
-          <button className="btn-sidebar-logout" onClick={handleLogout}>
-            <LogOut size={18} />
+          {/* User Profile Card */}
+          <div className="sidebar-profile-card">
+            {user?.profilePicture ? (
+              <img
+                src={user.profilePicture}
+                alt={user.fullName}
+                style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary-light)' }}
+              />
+            ) : (
+              <div className="sidebar-avatar-placeholder">
+                {(user?.fullName || 'A').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="sidebar-profile-details">
+              <span className="sidebar-profile-name">{user?.fullName || 'Panchayat Admin'}</span>
+              <span className="sidebar-profile-role">{user?.role || 'Panchayat Administrator'}</span>
+            </div>
+          </div>
+
+          {/* Light/Dark Mode toggle */}
+          <div className="sidebar-theme-toggle">
+            <div className="toggle-label">
+              {settingsSystem.theme === 'Dark' ? <Moon size={16} strokeWidth={1.8} /> : <Sun size={16} strokeWidth={1.8} />}
+              <span>{settingsSystem.theme === 'Dark' ? 'Dark Mode' : 'Light Mode'}</span>
+            </div>
+            <button
+              className="theme-switch-btn"
+              onClick={() => {
+                const newTheme = settingsSystem.theme === 'Dark' ? 'Light' : 'Dark';
+                setSettingsSystem({ ...settingsSystem, theme: newTheme });
+                showToast(`${newTheme} theme activated.`);
+              }}
+              aria-label="Toggle Theme"
+              type="button"
+            >
+              <div className={`theme-switch-thumb ${settingsSystem.theme === 'Dark' ? 'dark' : ''}`} />
+            </button>
+          </div>
+
+          <button className="btn-sidebar-logout" onClick={handleLogout} type="button">
+            <LogOut size={18} strokeWidth={1.8} />
             <span>Log Out</span>
           </button>
+        </div>
+
+        {/* Nature-inspired subtle decorations */}
+        <div className="sidebar-decorations">
+          <svg className="decor-leaf" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.58,20C9,20.67 11.6,18.8 13,16C15.8,14.6 18.27,11.23 18,8M12,17C10,17 7.5,15 8,13C8.5,11 11.5,11 11.5,11C11.5,11 12,13 11,15C10.5,16 11,17 12,17M19,2C14,2 12.5,5.5 12.5,5.5C12.5,5.5 14.5,5 16,6.5C17.5,8 17,10 17,10C17,10 20.5,8.5 20.5,3.5C20.5,2.5 19.8,2 19,2Z" />
+          </svg>
+          <svg className="decor-curves" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M-10,90 Q20,70 50,90 T110,80 L110,110 L-10,110 Z" fill="currentColor" />
+            <path d="M-10,85 Q30,65 70,85 T110,75 L110,110 L-10,110 Z" fill="currentColor" opacity="0.5" />
+          </svg>
         </div>
       </aside>
 
@@ -2120,7 +2059,7 @@ export default function AdminDashboard() {
                     value={userPanchayatFilter}
                     onChange={(e) => setUserPanchayatFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="">All Panchayats</option>
                     {uniquePanchayats.map(panchayat => (
@@ -2134,7 +2073,7 @@ export default function AdminDashboard() {
                     value={userStatusFilter}
                     onChange={(e) => setUserStatusFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="">All Statuses</option>
                     <option value="Active">Active</option>
@@ -2149,7 +2088,7 @@ export default function AdminDashboard() {
                     setUserPanchayatFilter('');
                     setUserStatusFilter('');
                   }}
-                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: 'var(--bg-card-hover)' }}
                 >
                   Clear Filters
                 </button>
@@ -2189,7 +2128,7 @@ export default function AdminDashboard() {
                   )}
                 </div>
               ) : (
-                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid #edf2f7', borderRadius: '12px' }}>
+                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
                   <table className="admin-table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
@@ -2224,10 +2163,10 @@ export default function AdminDashboard() {
                               </div>
                             </td>
                             <td>
-                              <span style={{ fontSize: '0.82rem', color: '#475569' }}>{u.email}</span>
+                              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{u.email}</span>
                             </td>
                             <td>
-                              <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>{u.mobile || 'Not provided'}</span>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{u.mobile || 'Not provided'}</span>
                             </td>
                             <td>
                               <span className={`badge-status ${(u.status || 'Active').toLowerCase()}`}>
@@ -2238,7 +2177,7 @@ export default function AdminDashboard() {
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                                 <button
                                   className="admin-btn secondary"
-                                  style={{ padding: '0 12px', fontSize: '0.78rem', height: '32px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
+                                  style={{ padding: '0 12px', fontSize: '0.78rem', height: '32px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
                                   onClick={() => {
                                     setSelectedUserDetails(null);
                                     setUserModalOpen(true);
@@ -2371,7 +2310,7 @@ export default function AdminDashboard() {
                     value={postStatusFilter}
                     onChange={(e) => setPostStatusFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="">All Statuses</option>
                     <option value="Pending">Pending</option>
@@ -2386,7 +2325,7 @@ export default function AdminDashboard() {
                     setPostSearchQuery('');
                     setPostStatusFilter('');
                   }}
-                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: 'var(--bg-card-hover)' }}
                 >
                   Clear Filters
                 </button>
@@ -2433,7 +2372,7 @@ export default function AdminDashboard() {
                         {postImage ? (
                           <img src={postImage} alt="post media" className="post-card-img" />
                         ) : (
-                          <div style={{ height: '180px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                          <div style={{ height: '180px', background: 'var(--bg-card-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
                             <FolderOpen size={48} />
                           </div>
                         )}
@@ -2450,7 +2389,7 @@ export default function AdminDashboard() {
                             {post.caption}
                           </p>
                           <div style={{ marginTop: 'auto', borderTop: '1px solid #edf2f7', paddingTop: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                               <span>By: <strong>{post.user?.fullName || 'Citizen'}</strong></span>
                               <span>{new Date(post.createdAt).toLocaleDateString()}</span>
                             </div>
@@ -2463,7 +2402,7 @@ export default function AdminDashboard() {
                           <div style={{ display: 'flex', gap: '8px', marginTop: '16px', borderTop: '1px solid #edf2f7', paddingTop: '12px' }}>
                             <button
                               className="admin-btn secondary"
-                              style={{ flex: 1, padding: '0 8px', fontSize: '0.75rem', height: '32px', border: '1px solid #e2e8f0', background: '#f8fafc' }}
+                              style={{ flex: 1, padding: '0 8px', fontSize: '0.75rem', height: '32px', border: '1px solid var(--border-color)', background: 'var(--bg-card-hover)' }}
                               onClick={() => {
                                 setSelectedPostDetails(post);
                                 setPostModalOpen(true);
@@ -2555,7 +2494,7 @@ export default function AdminDashboard() {
                     value={lostFoundTypeFilter}
                     onChange={(e) => setLostFoundTypeFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="All">All Types</option>
                     <option value="Lost">Lost</option>
@@ -2568,7 +2507,7 @@ export default function AdminDashboard() {
                     value={lostFoundStatusFilter}
                     onChange={(e) => setLostFoundStatusFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="All">All Statuses</option>
                     <option value="Active">Active</option>
@@ -2583,7 +2522,7 @@ export default function AdminDashboard() {
                     setLostFoundTypeFilter('All');
                     setLostFoundStatusFilter('All');
                   }}
-                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: 'var(--bg-card-hover)' }}
                 >
                   Clear Filters
                 </button>
@@ -2611,7 +2550,7 @@ export default function AdminDashboard() {
                   </p>
                 </div>
               ) : (
-                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid #edf2f7', borderRadius: '12px' }}>
+                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
                   <table className="admin-table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
@@ -2634,7 +2573,7 @@ export default function AdminDashboard() {
                                 {itemImage ? (
                                   <img src={itemImage} alt={item.itemName} style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover' }} />
                                 ) : (
-                                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'var(--bg-card-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
                                     <FolderOpen size={16} />
                                   </div>
                                 )}
@@ -2648,8 +2587,15 @@ export default function AdminDashboard() {
                                 textTransform: 'uppercase',
                                 padding: '4px 8px',
                                 borderRadius: '4px',
-                                background: isLost ? '#fee2e2' : '#d1fae5',
-                                color: isLost ? '#ef4444' : '#10b981'
+                                background: settingsSystem.theme === 'Dark'
+                                  ? (isLost ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)')
+                                  : (isLost ? '#fee2e2' : '#d1fae5'),
+                                color: settingsSystem.theme === 'Dark'
+                                  ? (isLost ? '#FF8A8A' : '#4ADE80')
+                                  : (isLost ? '#ef4444' : '#10b981'),
+                                border: settingsSystem.theme === 'Dark'
+                                  ? (isLost ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(34, 197, 94, 0.25)')
+                                  : 'none'
                               }}>{item.type}</span>
                             </td>
                             <td>{item.user?.fullName || 'Citizen'}</td>
@@ -2657,9 +2603,19 @@ export default function AdminDashboard() {
                             <td>
                               {(() => {
                                 const norm = item.status === 'Active' ? 'LOST' : item.status === 'Resolved' ? 'RETURNED' : (item.status || 'LOST').toUpperCase();
-                                let bg = '#fee2e2', fg = '#ef4444'; // LOST
-                                if (norm === 'FOUND') { bg = '#d1fae5'; fg = '#10b981'; }
-                                else if (norm === 'RETURNED') { bg = '#dbeafe'; fg = '#2563eb'; }
+                                const isDark = settingsSystem.theme === 'Dark';
+                                let bg = isDark ? 'rgba(239, 68, 68, 0.15)' : '#fee2e2';
+                                let fg = isDark ? '#FF8A8A' : '#ef4444';
+                                let borderStyle = isDark ? '1px solid rgba(239, 68, 68, 0.25)' : 'none';
+                                if (norm === 'FOUND') {
+                                  bg = isDark ? 'rgba(34, 197, 94, 0.15)' : '#d1fae5';
+                                  fg = isDark ? '#4ADE80' : '#10b981';
+                                  borderStyle = isDark ? '1px solid rgba(34, 197, 94, 0.25)' : 'none';
+                                } else if (norm === 'RETURNED') {
+                                  bg = isDark ? 'rgba(59, 130, 246, 0.15)' : '#dbeafe';
+                                  fg = isDark ? '#60A5FA' : '#2563eb';
+                                  borderStyle = isDark ? '1px solid rgba(59, 130, 246, 0.25)' : 'none';
+                                }
                                 return (
                                   <span style={{
                                     padding: '4px 10px',
@@ -2667,7 +2623,8 @@ export default function AdminDashboard() {
                                     fontSize: '0.7rem',
                                     fontWeight: 800,
                                     background: bg,
-                                    color: fg
+                                    color: fg,
+                                    border: borderStyle
                                   }}>{norm}</span>
                                 );
                               })()}
@@ -2676,7 +2633,7 @@ export default function AdminDashboard() {
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                                 <button
                                   className="admin-btn secondary"
-                                  style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
+                                  style={{ padding: '0 10px', fontSize: '0.75rem', height: '30px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
                                   onClick={() => {
                                     setSelectedLostFoundItem(item);
                                     setLostFoundModalOpen(true);
@@ -2780,7 +2737,7 @@ export default function AdminDashboard() {
                     value={annCategoryFilter}
                     onChange={(e) => setAnnCategoryFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="All">All Categories</option>
                     <option value="General">General</option>
@@ -2800,7 +2757,7 @@ export default function AdminDashboard() {
                     value={annPriorityFilter}
                     onChange={(e) => setAnnPriorityFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="All">All Priorities</option>
                     <option value="Normal">Normal</option>
@@ -2814,7 +2771,7 @@ export default function AdminDashboard() {
                     value={annDistrictFilter}
                     onChange={(e) => setAnnDistrictFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="All">All Districts</option>
                     <option value="Thiruvananthapuram">Thiruvananthapuram</option>
@@ -2839,7 +2796,7 @@ export default function AdminDashboard() {
                     value={annStatusFilter}
                     onChange={(e) => setAnnStatusFilter(e.target.value)}
                     className="admin-select"
-                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid #cbd5e1', background: '#fff' }}
+                    style={{ fontSize: '0.85rem', width: '100%', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}
                   >
                     <option value="All">All Statuses</option>
                     <option value="Active">Active</option>
@@ -2857,7 +2814,7 @@ export default function AdminDashboard() {
                     setAnnPanchayatFilter('All');
                     setAnnStatusFilter('All');
                   }}
-                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: '#f1f5f9' }}
+                  style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 16px', background: 'var(--bg-card-hover)' }}
                 >
                   Clear Filters
                 </button>
@@ -2886,7 +2843,7 @@ export default function AdminDashboard() {
                   <button className="admin-btn primary" onClick={() => handleOpenAnnModal(null)}>Create Announcement</button>
                 </div>
               ) : (
-                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid #edf2f7', borderRadius: '12px' }}>
+                <div className="chart-card" style={{ padding: 0, overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
                   <table className="admin-table-clean" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
@@ -2902,9 +2859,19 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {filteredAnnouncements.map(ann => {
-                        let prioBg = '#f1f5f9', prioFg = '#475569';
-                        if (ann.priority === 'Urgent') { prioBg = '#fee2e2'; prioFg = '#ef4444'; }
-                        else if (ann.priority === 'Important') { prioBg = '#fffbeb'; prioFg = '#b45309'; }
+                        const isDark = settingsSystem.theme === 'Dark';
+                        let prioBg = isDark ? 'rgba(107, 114, 128, 0.15)' : '#f1f5f9';
+                        let prioFg = isDark ? '#9ca3af' : '#475569';
+                        let prioBorder = isDark ? '1px solid rgba(107, 114, 128, 0.25)' : 'none';
+                        if (ann.priority === 'Urgent') {
+                          prioBg = isDark ? 'rgba(239, 68, 68, 0.15)' : '#fee2e2';
+                          prioFg = isDark ? '#FF8A8A' : '#ef4444';
+                          prioBorder = isDark ? '1px solid rgba(239, 68, 68, 0.25)' : 'none';
+                        } else if (ann.priority === 'Important') {
+                          prioBg = isDark ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb';
+                          prioFg = isDark ? '#FBBF24' : '#b45309';
+                          prioBorder = isDark ? '1px solid rgba(245, 158, 11, 0.25)' : 'none';
+                        }
 
                         const hasImage = ann.attachment;
 
@@ -2926,7 +2893,7 @@ export default function AdminDashboard() {
                                 borderRadius: '4px',
                                 background: prioBg,
                                 color: prioFg,
-                                border: `1px solid ${prioFg}20`
+                                border: prioBorder
                               }}>{ann.priority}</span>
                             </td>
                             <td>{ann.district || 'All'}</td>
@@ -2938,8 +2905,15 @@ export default function AdminDashboard() {
                                 borderRadius: '9999px',
                                 fontSize: '0.7rem',
                                 fontWeight: 800,
-                                background: ann.status === 'Active' ? '#e8f5e9' : '#eceff1',
-                                color: ann.status === 'Active' ? '#2e7d32' : '#455a64'
+                                background: isDark
+                                  ? (ann.status === 'Active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(107, 114, 128, 0.15)')
+                                  : (ann.status === 'Active' ? '#e8f5e9' : '#eceff1'),
+                                color: isDark
+                                  ? (ann.status === 'Active' ? '#4ADE80' : '#9ca3af')
+                                  : (ann.status === 'Active' ? '#2e7d32' : '#455a64'),
+                                border: isDark
+                                  ? (ann.status === 'Active' ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(107, 114, 128, 0.25)')
+                                  : 'none'
                               }}>{ann.status}</span>
                             </td>
                             <td style={{ textAlign: 'right', paddingRight: '24px' }}>
@@ -3002,7 +2976,7 @@ export default function AdminDashboard() {
                           value={annFormTitle}
                           onChange={(e) => setAnnFormTitle(e.target.value)}
                           required
-                          style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }}
+                          style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem' }}
                           placeholder="e.g. Scheduled Road Maintenance notice"
                         />
                       </div>
@@ -3014,7 +2988,7 @@ export default function AdminDashboard() {
                           onChange={(e) => setAnnFormDescription(e.target.value)}
                           required
                           rows={4}
-                          style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.5 }}
+                          style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.5 }}
                           placeholder="Provide details about dates, alternate routes, affected services..."
                         />
                       </div>
@@ -3025,7 +2999,7 @@ export default function AdminDashboard() {
                           <select
                             value={annFormCategory}
                             onChange={(e) => setAnnFormCategory(e.target.value)}
-                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem', background: 'var(--bg-card)' }}
                           >
                             <option value="General">General</option>
                             <option value="Public Notice">Public Notice</option>
@@ -3043,7 +3017,7 @@ export default function AdminDashboard() {
                           <select
                             value={annFormPriority}
                             onChange={(e) => setAnnFormPriority(e.target.value)}
-                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem', background: 'var(--bg-card)' }}
                           >
                             <option value="Normal">Normal</option>
                             <option value="Important">Important</option>
@@ -3061,7 +3035,7 @@ export default function AdminDashboard() {
                               setAnnFormDistrict(e.target.value);
                               setAnnFormPanchayat('All Panchayats');
                             }}
-                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem', background: 'var(--bg-card)' }}
                           >
                             <option value="All Districts">All Districts</option>
                             {KERALA_DISTRICTS.map(d => (
@@ -3074,7 +3048,7 @@ export default function AdminDashboard() {
                           <select
                             value={annFormPanchayat}
                             onChange={(e) => setAnnFormPanchayat(e.target.value)}
-                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem', background: 'var(--bg-card)' }}
                           >
                             <option value="All Panchayats">All Panchayats</option>
                             {getPanchayatsForDistrict(annFormDistrict).map(p => (
@@ -3091,7 +3065,7 @@ export default function AdminDashboard() {
                             type="date"
                             value={annFormExpiryDate}
                             onChange={(e) => setAnnFormExpiryDate(e.target.value)}
-                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }}
+                            style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.85rem' }}
                           />
                         </div>
                       </div>
@@ -3123,7 +3097,7 @@ export default function AdminDashboard() {
 
               {/* VIEW DETAILS OVERLAY MODAL */}
               {annDetailsOpen && selectedAnnItem && (() => {
-                const priorityStyle = annFormPriority === 'Urgent' ? { background: '#fee2e2', color: '#ef4444' } : annFormPriority === 'Important' ? { background: '#fffbeb', color: '#b45309' } : { background: '#f1f5f9', color: '#475569' };
+                const priorityStyle = annFormPriority === 'Urgent' ? { background: '#fee2e2', color: '#ef4444' } : annFormPriority === 'Important' ? { background: '#fffbeb', color: '#b45309' } : { background: 'var(--bg-card-hover)', color: 'var(--text-secondary)' };
                 const attachmentImage = selectedAnnItem.attachment ? (selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `http://localhost:5000${selectedAnnItem.attachment}`) : null;
                 return (
                   <div className="admin-modal-overlay" onClick={() => setAnnDetailsOpen(false)}>
@@ -3141,7 +3115,7 @@ export default function AdminDashboard() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '4px' }}>
                         {attachmentImage && (
                           <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', textAlign: 'center' }}>
-                            <img src={attachmentImage} alt={selectedAnnItem.title} style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', background: '#f8fafc' }} />
+                            <img src={attachmentImage} alt={selectedAnnItem.title} style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', background: 'var(--bg-card-hover)' }} />
                           </div>
                         )}
 
@@ -3172,7 +3146,7 @@ export default function AdminDashboard() {
 
                           <div style={{ marginTop: '16px' }}>
                             <span className="user-detail-label">Announcement Description</span>
-                            <p style={{ fontSize: '0.88rem', color: '#334155', margin: '4px 0 0 0', lineHeight: 1.6, background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #edf2f7', whiteSpace: 'pre-wrap' }}>
+                            <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', margin: '4px 0 0 0', lineHeight: 1.6, background: 'var(--bg-card-hover)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', whiteSpace: 'pre-wrap' }}>
                               {selectedAnnItem.description}
                             </p>
                           </div>
@@ -3221,13 +3195,13 @@ export default function AdminDashboard() {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
-                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Settings & System Config</h1>
-                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Configure admin access, manage Panchayaths, departments, and notification preferences</p>
+                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>Settings & System Config</h1>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Configure admin access, manage Panchayaths, departments, and notification preferences</p>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '30px', alignItems: 'flex-start' }}>
                 {/* Left Navigation pane */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '12px' }}>
                   {[
                     { key: 'profile', label: 'Admin Profile' },
                     { key: 'security', label: 'Account & Security' },
@@ -3259,47 +3233,47 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Right detail configuration pane */}
-                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px', minHeight: '400px' }}>
-                  
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '24px', minHeight: '400px' }}>
+
                   {/* Admin Profile Section */}
                   {settingsActiveSection === 'profile' && (
                     <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Admin Profile</h3>
-                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Edit your public dashboard name and login identification</p>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Admin Profile</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Edit your public dashboard name and login identification</p>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Full Name *</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Full Name *</label>
                           <input
                             type="text"
                             required
                             value={settingsProfileName}
                             onChange={(e) => setSettingsProfileName(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Email Address *</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Email Address *</label>
                           <input
                             type="email"
                             required
                             value={settingsProfileEmail}
                             onChange={(e) => setSettingsProfileEmail(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Mobile Number</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Mobile Number</label>
                           <input
                             type="text"
                             value={settingsProfileMobile}
                             onChange={(e) => setSettingsProfileMobile(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
                       </div>
@@ -3318,12 +3292,12 @@ export default function AdminDashboard() {
                   {/* Account & Security Section */}
                   {settingsActiveSection === 'security' && (
                     <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Account Security</h3>
-                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure high-security access passwords for safety</p>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Account Security</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Configure high-security access passwords for safety</p>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Current Password *</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Current Password *</label>
                           <input
                             type="password"
                             required
@@ -3331,12 +3305,12 @@ export default function AdminDashboard() {
                             value={settingsCurrentPassword}
                             onChange={(e) => setSettingsCurrentPassword(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>New Password *</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>New Password *</label>
                           <input
                             type="password"
                             required
@@ -3344,12 +3318,12 @@ export default function AdminDashboard() {
                             value={settingsNewPassword}
                             onChange={(e) => setSettingsNewPassword(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Confirm New Password *</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Confirm New Password *</label>
                           <input
                             type="password"
                             required
@@ -3357,7 +3331,7 @@ export default function AdminDashboard() {
                             value={settingsConfirmPassword}
                             onChange={(e) => setSettingsConfirmPassword(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
                       </div>
@@ -3376,8 +3350,8 @@ export default function AdminDashboard() {
                   {/* User & Role Management */}
                   {settingsActiveSection === 'roles' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>User & Role Management</h3>
-                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure core roles and system access permissions</p>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>User & Role Management</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Configure core roles and system access permissions</p>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         {[
@@ -3385,11 +3359,11 @@ export default function AdminDashboard() {
                           { role: 'Panchayat Admin', permissions: ['Manage assigned complaints', 'Publish announcements', 'Read citizens'] },
                           { role: 'Main Admin (You)', permissions: ['Full system config', 'Manage Panchayat Admins', 'Oversee routing configurations'] }
                         ].map((r, idx) => (
-                          <div key={idx} style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                            <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', display: 'block', marginBottom: '8px' }}>{r.role}</span>
+                          <div key={idx} style={{ background: 'var(--bg-card-hover)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '8px' }}>{r.role}</span>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                               {r.permissions.map((p, i) => (
-                                <span key={i} style={{ fontSize: '0.72rem', background: '#e2e8f0', color: '#475569', padding: '4px 10px', borderRadius: '99px', fontWeight: 600 }}>
+                                <span key={i} style={{ fontSize: '0.72rem', background: '#e2e8f0', color: 'var(--text-secondary)', padding: '4px 10px', borderRadius: '99px', fontWeight: 600 }}>
                                   ✓ {p}
                                 </span>
                               ))}
@@ -3405,8 +3379,8 @@ export default function AdminDashboard() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Panchayath Management</h3>
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>Configure local bodies and registration zones</p>
+                          <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Panchayath Management</h3>
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Configure local bodies and registration zones</p>
                         </div>
                         <button className="admin-btn primary" onClick={() => handleOpenPanchayatModal(null)} style={{ gap: '6px', padding: '8px 16px' }}>
                           <Plus size={16} /> Add Panchayath
@@ -3434,7 +3408,7 @@ export default function AdminDashboard() {
                             <tbody>
                               {settingsPanchayats.map(p => (
                                 <tr key={p._id}>
-                                  <td style={{ fontWeight: 700, color: '#1e293b' }}>{p.name}</td>
+                                  <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.name}</td>
                                   <td>{p.district}</td>
                                   <td>{p.panchayatCode || '—'}</td>
                                   <td>{p.email || '—'}</td>
@@ -3456,8 +3430,8 @@ export default function AdminDashboard() {
                   {/* Department Management */}
                   {settingsActiveSection === 'departments' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Department Management</h3>
-                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure grievance routing departments</p>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Department Management</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Configure grievance routing departments</p>
 
                       <form onSubmit={(e) => {
                         e.preventDefault();
@@ -3477,15 +3451,15 @@ export default function AdminDashboard() {
                           value={newDeptName}
                           onChange={(e) => setNewDeptName(e.target.value)}
                           className="complaints-search-input"
-                          style={{ flex: 1, border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          style={{ flex: 1, border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                         />
                         <button type="submit" className="admin-btn primary">Add</button>
                       </form>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
                         {settingsDepartments.map((dept, idx) => (
-                          <div key={idx} style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>{dept}</span>
+                          <div key={idx} style={{ background: 'var(--bg-card-hover)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>{dept}</span>
                             <button className="admin-btn secondary" onClick={() => {
                               if (!window.confirm(`Are you sure you want to remove ${dept}?`)) return;
                               setSettingsDepartments(settingsDepartments.filter(d => d !== dept));
@@ -3500,8 +3474,8 @@ export default function AdminDashboard() {
                   {/* Notification Settings */}
                   {settingsActiveSection === 'notifications' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>Notification Settings</h3>
-                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure communication alerts and delivery frequencies</p>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Notification Settings</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Configure communication alerts and delivery frequencies</p>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
                         {[
@@ -3510,10 +3484,10 @@ export default function AdminDashboard() {
                           { key: 'sseRealtime', label: 'SSE Realtime Broadcast', desc: 'Enable live WebSocket and SSE stream parameters' },
                           { key: 'weeklyReports', label: 'Weekly Summary PDF', desc: 'Auto-generate and email analytics reports weekly' }
                         ].map(n => (
-                          <div key={n.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '14px 16px', borderRadius: '12px', border: '1px solid #edf2f7' }}>
+                          <div key={n.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card-hover)', padding: '14px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                             <div>
-                              <span style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155' }}>{n.label}</span>
-                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{n.desc}</span>
+                              <span style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-primary)' }}>{n.label}</span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{n.desc}</span>
                             </div>
                             <input
                               type="checkbox"
@@ -3536,12 +3510,12 @@ export default function AdminDashboard() {
                   {/* System Preferences */}
                   {settingsActiveSection === 'system' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>System Preferences</h3>
-                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: '#64748b' }}>Configure dashboard preferences and active languages</p>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>System Preferences</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Configure dashboard preferences and active languages</p>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '480px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Active Language</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Active Language</label>
                           <select
                             value={settingsSystem.language}
                             onChange={(e) => {
@@ -3549,7 +3523,7 @@ export default function AdminDashboard() {
                               showToast('System language setting updated.');
                             }}
                             className="admin-select"
-                            style={{ border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                            style={{ border: '1px solid var(--border-color)', fontSize: '0.85rem', background: 'var(--bg-card)' }}
                           >
                             <option value="English">English</option>
                             <option value="Malayalam">Malayalam</option>
@@ -3557,7 +3531,7 @@ export default function AdminDashboard() {
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Theme Selection</label>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Theme Selection</label>
                           <select
                             value={settingsSystem.theme}
                             onChange={(e) => {
@@ -3565,7 +3539,7 @@ export default function AdminDashboard() {
                               showToast('Theme selector updated.');
                             }}
                             className="admin-select"
-                            style={{ border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                            style={{ border: '1px solid var(--border-color)', fontSize: '0.85rem', background: 'var(--bg-card)' }}
                           >
                             <option value="Light">Light Mode</option>
                             <option value="Dark">Dark Mode</option>
@@ -3600,17 +3574,17 @@ export default function AdminDashboard() {
                 <div className="admin-modal-overlay" style={{ zIndex: 1200 }}>
                   <div className="admin-modal-container" style={{ maxWidth: '540px', padding: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #edf2f7', paddingBottom: '12px' }}>
-                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                         {selectedPanchayat ? 'Edit Panchayath Details' : 'Configure New Panchayath'}
                       </h3>
-                      <button onClick={() => setPanchayatModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                      <button onClick={() => setPanchayatModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                         <X size={20} />
                       </button>
                     </div>
 
                     <form onSubmit={handleSavePanchayat} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Panchayath Name *</label>
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Panchayath Name *</label>
                         <input
                           type="text"
                           required
@@ -3618,13 +3592,13 @@ export default function AdminDashboard() {
                           value={panchayatFormName}
                           onChange={(e) => setPanchayatFormName(e.target.value)}
                           className="complaints-search-input"
-                          style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                          style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                         />
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>District *</label>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>District *</label>
                           <input
                             type="text"
                             required
@@ -3632,45 +3606,45 @@ export default function AdminDashboard() {
                             value={panchayatFormDistrict}
                             onChange={(e) => setPanchayatFormDistrict(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Panchayath Code</label>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Panchayath Code</label>
                           <input
                             type="text"
                             placeholder="e.g. KTP-PANCH"
                             value={panchayatFormCode}
                             onChange={(e) => setPanchayatFormCode(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>PIN Code</label>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>PIN Code</label>
                           <input
                             type="text"
                             placeholder="e.g. 686507"
                             value={panchayatFormPinCode}
                             onChange={(e) => setPanchayatFormPinCode(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Contact Email</label>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Contact Email</label>
                           <input
                             type="email"
                             placeholder="e.g. contact@kanjirappally.in"
                             value={panchayatFormEmail}
                             onChange={(e) => setPanchayatFormEmail(e.target.value)}
                             className="complaints-search-input"
-                            style={{ width: '100%', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            style={{ width: '100%', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                           />
                         </div>
                       </div>
@@ -3699,13 +3673,13 @@ export default function AdminDashboard() {
           const statsObj = analyticsData?.stats || {};
           const chartsObj = analyticsData?.charts || {};
           const panchayatsList = chartsObj.panchayatPerformance || [];
-          
-          const filteredPanchayats = panchayatsList.filter(p => 
+
+          const filteredPanchayats = panchayatsList.filter(p =>
             p.panchayat.toLowerCase().includes(panchayatSearch.toLowerCase())
           );
 
-          const resolutionRate = statsObj.total > 0 
-            ? Math.round((statsObj.resolved / statsObj.total) * 100) 
+          const resolutionRate = statsObj.total > 0
+            ? Math.round((statsObj.resolved / statsObj.total) * 100)
             : 0;
 
           return (
@@ -3713,29 +3687,29 @@ export default function AdminDashboard() {
               {/* Header and Toolbar */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                  <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Analytics & Reports</h1>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Real-time civic performance metrics, trends, and panchayat analytics</p>
+                  <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>Analytics & Reports</h1>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Real-time civic performance metrics, trends, and panchayat analytics</p>
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>From:</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>From:</label>
                     <input
                       type="date"
                       value={analyticsStartDate}
                       onChange={(e) => setAnalyticsStartDate(e.target.value)}
                       className="complaints-search-input"
-                      style={{ padding: '6px 10px', fontSize: '0.82rem', border: '1px solid #cbd5e1', borderRadius: '8px' }}
+                      style={{ padding: '6px 10px', fontSize: '0.82rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>To:</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>To:</label>
                     <input
                       type="date"
                       value={analyticsEndDate}
                       onChange={(e) => setAnalyticsEndDate(e.target.value)}
                       className="complaints-search-input"
-                      style={{ padding: '6px 10px', fontSize: '0.82rem', border: '1px solid #cbd5e1', borderRadius: '8px' }}
+                      style={{ padding: '6px 10px', fontSize: '0.82rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}
                     />
                   </div>
                   <button className="admin-btn primary" onClick={() => fetchAnalyticsData()} style={{ gap: '6px', padding: '8px 16px' }}>
@@ -3804,10 +3778,10 @@ export default function AdminDashboard() {
 
                   {/* Main Grid for Visual Charts */}
                   <div className="dashboard-grid-2col" style={{ gridTemplateColumns: '1.2fr 0.8fr', gap: '20px' }}>
-                    
+
                     {/* Left Column: Monthly Trends & Department performance */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      
+
                       {/* Monthly Complaint Trends Chart */}
                       <div className="chart-card">
                         <div className="chart-title-container">
@@ -3821,7 +3795,7 @@ export default function AdminDashboard() {
                               <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '8px', height: '100%', justifyContent: 'flex-end' }}>
                                 <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary)' }}>{t.count}</span>
                                 <div style={{ width: '28px', height: `${heightPct}%`, background: 'linear-gradient(180deg, var(--primary) 0%, var(--primary-light) 100%)', borderRadius: '6px 6px 0 0', minHeight: '4px', transition: 'height 0.3s ease' }} />
-                                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{t.month}</span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{t.month}</span>
                               </div>
                             );
                           })}
@@ -3829,14 +3803,14 @@ export default function AdminDashboard() {
                       </div>
 
                       {/* Department performance SLA */}
-                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
-                        <h3 style={{ margin: '0 0 16px', fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Performance by Department</h3>
+                      <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', padding: '20px' }}>
+                        <h3 style={{ margin: '0 0 16px', fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-primary)' }}>Performance by Department</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '320px', overflowY: 'auto' }}>
                           {(chartsObj.departmentPerformance || []).slice(0, 5).map((dept, idx) => (
-                            <div key={idx} style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #edf2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div key={idx} style={{ background: 'var(--bg-card-hover)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <div>
-                                <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>{dept.department}</span>
-                                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Assigned: {dept.total} | Resolved: {dept.resolved}</span>
+                                <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>{dept.department}</span>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Assigned: {dept.total} | Resolved: {dept.resolved}</span>
                               </div>
                               <span style={{ fontSize: '0.85rem', fontWeight: 800, color: dept.successRate > 75 ? '#10b981' : dept.successRate > 40 ? '#f59e0b' : '#ef4444' }}>
                                 {dept.successRate}% SLA
@@ -3849,10 +3823,10 @@ export default function AdminDashboard() {
 
                     {/* Right Column: Status distribution, category metrics & priority */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      
+
                       {/* Complaints by Status & Priority */}
-                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Status Distribution</h3>
+                      <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-primary)' }}>Status Distribution</h3>
                         <div style={{ display: 'flex', gap: '8px', height: '16px', borderRadius: '8px', overflow: 'hidden' }}>
                           {[
                             { label: 'Pending', count: statsObj.pending || 0, color: '#ef4444' },
@@ -3874,7 +3848,7 @@ export default function AdminDashboard() {
                             { label: 'In Progress', count: statsObj.inProgress || 0, color: '#f59e0b' },
                             { label: 'Resolved', count: statsObj.resolved || 0, color: '#10b981' }
                           ].map((s, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.color }} />
                               <span>{s.label}: {s.count}</span>
                             </div>
@@ -3883,32 +3857,32 @@ export default function AdminDashboard() {
                       </div>
 
                       {/* Priority Distribution */}
-                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
-                        <h3 style={{ margin: '0 0 12px', fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Priority Distribution</h3>
+                      <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', padding: '20px' }}>
+                        <h3 style={{ margin: '0 0 12px', fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-primary)' }}>Priority Distribution</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           {Object.entries(chartsObj.priorityDistribution || {}).map(([p, count], idx) => (
                             <div key={idx} style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center', justifyContent: 'space-between' }}>
                               <span className={`badge-priority ${p.toLowerCase()}`} style={{ fontSize: '0.68rem', padding: '3px 8px' }}>{p}</span>
-                              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>{count} Complaints</span>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>{count} Complaints</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
                       {/* Category Breakdown */}
-                      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
-                        <h3 style={{ margin: '0 0 12px', fontSize: '0.92rem', fontWeight: 800, color: '#1e293b' }}>Top Categories</h3>
+                      <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', padding: '20px' }}>
+                        <h3 style={{ margin: '0 0 12px', fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-primary)' }}>Top Categories</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           {(chartsObj.categoryDistribution || []).slice(0, 4).map((cat, idx) => {
                             const maxVal = Math.max(...(chartsObj.categoryDistribution || []).map(c => c.count), 1);
                             const pct = (cat.count / maxVal) * 100;
                             return (
                               <div key={idx}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#475569', fontWeight: 700, marginBottom: '2px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '2px' }}>
                                   <span>{cat.category}</span>
                                   <span>{cat.count}</span>
                                 </div>
-                                <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: '100%', height: '6px', background: 'var(--bg-card-hover)', borderRadius: '3px', overflow: 'hidden' }}>
                                   <div style={{ width: `${pct}%`, background: 'var(--primary)', height: '100%', borderRadius: '3px' }} />
                                 </div>
                               </div>
@@ -3920,11 +3894,11 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Panchayath-wise Comparison Section */}
-                  <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', marginTop: '12px' }}>
+                  <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', padding: '24px', marginTop: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
                       <div>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>Panchayath-wise Performance</h3>
-                        <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#64748b' }}>Comparative resolution metrics mapped across local authorities</p>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>Panchayath-wise Performance</h3>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Comparative resolution metrics mapped across local authorities</p>
                       </div>
                       <div className="search-input-wrapper" style={{ width: '260px' }}>
                         <Search size={14} className="search-icon" style={{ top: '10px' }} />
@@ -3960,7 +3934,7 @@ export default function AdminDashboard() {
                           ) : (
                             filteredPanchayats.map((p, idx) => (
                               <tr key={idx}>
-                                <td style={{ fontWeight: 700, color: '#1e293b' }}>{p.panchayat}</td>
+                                <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.panchayat}</td>
                                 <td style={{ fontWeight: 600 }}>{p.total}</td>
                                 <td style={{ color: '#10b981', fontWeight: 600 }}>{p.resolved}</td>
                                 <td style={{ color: '#ef4444', fontWeight: 600 }}>{p.pending}</td>
@@ -4122,7 +4096,7 @@ export default function AdminDashboard() {
                                     {c.priority}
                                   </span>
                                 </td>
-                                <td style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{c.date}</td>
+                                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{c.date}</td>
                               </tr>
                             ))
                           )}
@@ -4242,7 +4216,7 @@ export default function AdminDashboard() {
                       {isLoading ? (
                         [...Array(4)].map((_, i) => (
                           <div key={i} className="timeline-node" style={{ paddingBottom: '16px' }}>
-                            <span className="timeline-circle" style={{ background: '#f1f5f9' }} />
+                            <span className="timeline-circle" style={{ background: 'var(--bg-card-hover)' }} />
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <span className="skeleton-text" style={{ width: '120px' }} />
                               <span className="skeleton-text" style={{ width: '100%' }} />
@@ -4250,7 +4224,7 @@ export default function AdminDashboard() {
                           </div>
                         ))
                       ) : recentActivity.length === 0 ? (
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>No recent system activities logged.</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>No recent system activities logged.</div>
                       ) : (
                         recentActivity.slice(0, 4).map((act, i) => (
                           <div key={i} className="timeline-node">
@@ -4331,7 +4305,7 @@ export default function AdminDashboard() {
                     value={statusFilter}
                     onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
                     className="admin-select"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--bg-card)' }}
                   >
                     <option value="">All Statuses</option>
                     <option value="Pending">Pending</option>
@@ -4348,7 +4322,7 @@ export default function AdminDashboard() {
                     value={categoryFilter}
                     onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
                     className="admin-select"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--bg-card)' }}
                   >
                     <option value="">All Categories</option>
                     <option value="Road Damage">Road Damage</option>
@@ -4369,7 +4343,7 @@ export default function AdminDashboard() {
                     value={priorityFilter}
                     onChange={(e) => { setPriorityFilter(e.target.value); setCurrentPage(1); }}
                     className="admin-select"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--bg-card)' }}
                   >
                     <option value="">All Priorities</option>
                     <option value="Low">Low</option>
@@ -4384,7 +4358,7 @@ export default function AdminDashboard() {
                     value={deptFilter}
                     onChange={(e) => { setDeptFilter(e.target.value); setCurrentPage(1); }}
                     className="admin-select"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--bg-card)' }}
                   >
                     <option value="">All Departments</option>
                     <option value="Road Department">Road Department</option>
@@ -4402,7 +4376,7 @@ export default function AdminDashboard() {
                     value={startDate}
                     onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
                     className="admin-input"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--bg-card)' }}
                   />
                 </div>
 
@@ -4412,7 +4386,7 @@ export default function AdminDashboard() {
                     value={endDate}
                     onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
                     className="admin-input"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--bg-card)' }}
                   />
                 </div>
 
@@ -4478,7 +4452,7 @@ export default function AdminDashboard() {
                             )}
                           </td>
                           <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{c.category}</td>
-                          <td style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>{c.assignedDepartment || 'Not Routed'}</td>
+                          <td style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>{c.assignedDepartment || 'Not Routed'}</td>
                           <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{c.city}, {c.ward || 'General'}</td>
                           <td>
                             <span className={`badge-priority ${getPriorityClass(c.priority)}`}>
@@ -4490,7 +4464,7 @@ export default function AdminDashboard() {
                               {c.status}
                             </span>
                           </td>
-                          <td style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             {new Date(c.createdAt).toLocaleDateString()}
                           </td>
                           <td>
@@ -4523,7 +4497,7 @@ export default function AdminDashboard() {
                     value={rowsPerPage}
                     onChange={(e) => { setRowsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}
                     className="admin-select"
-                    style={{ width: '70px', padding: '4px 8px', background: '#ffffff' }}
+                    style={{ width: '70px', padding: '4px 8px', background: 'var(--bg-card)' }}
                   >
                     <option value={5}>5</option>
                     <option value={10}>10</option>
@@ -4612,7 +4586,7 @@ export default function AdminDashboard() {
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px', borderBottom: '1px solid #edf2f7', paddingBottom: '20px' }}>
                     <div>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Complaint ID</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Complaint ID</span>
                       <h1 style={{ margin: '4px 0 0 0', fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-dark)', fontFamily: 'monospace' }}>
                         {detailsComplaint.complaintId}
                       </h1>
@@ -4626,7 +4600,7 @@ export default function AdminDashboard() {
                         <span className={`badge-priority ${getPriorityClass(detailsComplaint.priority)}`} style={{ borderRadius: '6px' }}>
                           {detailsComplaint.priority || 'Normal'}
                         </span>
-                        <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                           Submitted: {new Date(detailsComplaint.createdAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -4691,7 +4665,7 @@ export default function AdminDashboard() {
                           <p><strong>District / Panchayat / Ward:</strong> {detailsComplaint.district} / {detailsComplaint.city} / {detailsComplaint.ward || 'General'}</p>
                         </>
                       ) : (
-                        <p style={{ color: '#64748b', fontStyle: 'italic', margin: 0 }}>Contact details withheld due to citizen anonymity.</p>
+                        <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic', margin: 0 }}>Contact details withheld due to citizen anonymity.</p>
                       )}
                     </div>
                   </div>
@@ -4709,16 +4683,16 @@ export default function AdminDashboard() {
                           key={idx}
                           onClick={() => { setActiveImageIndex(idx); setIsFullscreenOpen(true); }}
                           className="zoom-image-container"
-                          style={{ height: '100px', borderRadius: '8px', cursor: 'zoom-in', border: '1px solid #e2e8f0', overflow: 'hidden' }}
+                          style={{ height: '100px', borderRadius: '8px', cursor: 'zoom-in', border: '1px solid var(--border-color)', overflow: 'hidden' }}
                         >
                           <img src={img} alt={`Evidence ${idx + 1}`} className="zoom-image" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                    <div style={{ padding: '20px', textAlign: 'center', background: 'var(--bg-card-hover)', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <AlertTriangle size={24} style={{ color: '#94a3b8', marginBottom: '8px', display: 'inline-block' }} />
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>No photographic evidence uploaded.</p>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>No photographic evidence uploaded.</p>
                     </div>
                   )}
                 </div>
@@ -4730,7 +4704,7 @@ export default function AdminDashboard() {
                     <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', fontWeight: 800, color: 'var(--text-dark)', borderBottom: '1px solid #edf2f7', paddingBottom: '10px' }}>
                       Location
                     </h3>
-                    <div style={{ height: '140px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #cbd5e1', position: 'relative', marginBottom: '16px' }}>
+                    <div style={{ height: '140px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative', marginBottom: '16px' }}>
                       <div style={{ position: 'absolute', inset: 0, background: '#e0f2fe', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         <MapPin size={24} style={{ color: '#0284c7' }} />
                         <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#0369a1' }}>GPS Anchor Location</span>
@@ -4818,7 +4792,7 @@ export default function AdminDashboard() {
                       {detailsComplaint.status}
                     </span>
                     {detailsComplaint.assignedDepartment && detailsComplaint.assignedDepartment !== 'Not Assigned' && (
-                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                         (Assigned to {detailsComplaint.assignedDepartment})
                       </span>
                     )}
@@ -4833,7 +4807,7 @@ export default function AdminDashboard() {
                         value={detailsComplaint.status}
                         onChange={(e) => handleUpdateStatus(e.target.value)}
                         className="admin-select"
-                        style={{ background: '#ffffff' }}
+                        style={{ background: 'var(--bg-card)' }}
                         disabled={detailsComplaint.status === 'Resolved' || detailsComplaint.status === 'Rejected'}
                       >
                         <option value="Pending">Pending</option>
@@ -4852,7 +4826,7 @@ export default function AdminDashboard() {
                         value={detailsDeptAssign}
                         onChange={(e) => setDetailsDeptAssign(e.target.value)}
                         className="admin-select"
-                        style={{ background: '#ffffff' }}
+                        style={{ background: 'var(--bg-card)' }}
                         disabled={detailsComplaint.status === 'Resolved' || detailsComplaint.status === 'Rejected'}
                       >
                         <option value="">Choose Department</option>
@@ -4872,7 +4846,7 @@ export default function AdminDashboard() {
                         value={detailsOfficerAssign}
                         onChange={(e) => setDetailsOfficerAssign(e.target.value)}
                         className="admin-select"
-                        style={{ background: '#ffffff' }}
+                        style={{ background: 'var(--bg-card)' }}
                         disabled={detailsComplaint.status === 'Resolved' || detailsComplaint.status === 'Rejected'}
                       >
                         <option value="">Choose Officer</option>
@@ -4893,7 +4867,7 @@ export default function AdminDashboard() {
                         value={detailsCompletionDate}
                         onChange={(e) => setDetailsCompletionDate(e.target.value)}
                         className="admin-input"
-                        style={{ background: '#ffffff' }}
+                        style={{ background: 'var(--bg-card)' }}
                         disabled={detailsComplaint.status === 'Resolved' || detailsComplaint.status === 'Rejected'}
                       />
                     </div>
@@ -4907,7 +4881,7 @@ export default function AdminDashboard() {
                       value={detailsAdminNote}
                       onChange={(e) => setDetailsAdminNote(e.target.value)}
                       className="admin-textarea"
-                      style={{ minHeight: '80px', background: '#ffffff' }}
+                      style={{ minHeight: '80px', background: 'var(--bg-card)' }}
                     />
                   </div>
 
@@ -5008,29 +4982,29 @@ export default function AdminDashboard() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Recommended Department</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Recommended Department</span>
                       <span className="insight-pill info" style={{ alignSelf: 'flex-start' }}>{detailsComplaint.category} Division</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Estimated Resolution Time</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Estimated Resolution Time</span>
                       <span className="insight-pill" style={{ alignSelf: 'flex-start' }}>4 Business Days</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Suggested Priority</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Suggested Priority</span>
                       <span className={`badge-priority ${getPriorityClass(detailsComplaint.priority)}`} style={{ alignSelf: 'flex-start', borderRadius: '99px' }}>
                         {detailsComplaint.priority || 'Normal'}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Confidence Score</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Confidence Score</span>
                       <span className="insight-pill success" style={{ alignSelf: 'flex-start' }}>94% Match</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Possible Duplicate Complaint</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Possible Duplicate Complaint</span>
                       <span className="insight-pill danger" style={{ alignSelf: 'flex-start' }}>0 Found within 1km</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Suggested Action</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Suggested Action</span>
                       <span className="insight-pill" style={{ alignSelf: 'flex-start', fontWeight: 700 }}>Route to local crew</span>
                     </div>
                   </div>
@@ -5044,11 +5018,11 @@ export default function AdminDashboard() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {detailsActivityLogs.length === 0 ? (
-                      <div style={{ fontSize: '0.82rem', color: '#64748b', fontStyle: 'italic' }}>No activity logs recorded in database.</div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>No activity logs recorded in database.</div>
                     ) : (
                       detailsActivityLogs.map((log, idx) => (
                         <div key={idx} style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                          <div style={{ minWidth: '130px', color: '#64748b', fontWeight: 600 }}>
+                          <div style={{ minWidth: '130px', color: 'var(--text-secondary)', fontWeight: 600 }}>
                             {new Date(log.createdAt).toLocaleDateString()} {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                           <div style={{ flex: 1 }}>
@@ -5170,7 +5144,7 @@ export default function AdminDashboard() {
                   {/* Category A: Personal Information */}
                   <div className="user-details-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
                     <h4 className="user-details-title">Personal Information</h4>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: '#f8fafc', borderRadius: '12px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'var(--bg-card-hover)', borderRadius: '12px', marginBottom: '16px' }}>
                       {selectedUserDetails.profilePicture ? (
                         <img
                           src={selectedUserDetails.profilePicture.startsWith('http') ? selectedUserDetails.profilePicture : `http://localhost:5000${selectedUserDetails.profilePicture}`}
@@ -5342,14 +5316,14 @@ export default function AdminDashboard() {
                       <img
                         src={selectedPostDetails.image.startsWith('http') ? selectedPostDetails.image : `http://localhost:5000${selectedPostDetails.image}`}
                         alt="Community Post"
-                        style={{ width: '100%', maxHeight: '350px', objectFit: 'contain', background: '#f8fafc' }}
+                        style={{ width: '100%', maxHeight: '350px', objectFit: 'contain', background: 'var(--bg-card-hover)' }}
                       />
                     </div>
                   )}
                 </div>
 
                 {/* Meta details */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', background: 'var(--bg-card-hover)', padding: '16px', borderRadius: '12px' }}>
                   <div>
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Status</span>
                     <div style={{ marginTop: '4px' }}>
@@ -5382,7 +5356,7 @@ export default function AdminDashboard() {
                   {selectedPostDetails.comments && selectedPostDetails.comments.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto' }}>
                       {selectedPostDetails.comments.map((comment) => (
-                        <div key={comment._id} style={{ display: 'flex', gap: '8px', padding: '8px', background: '#f8fafc', borderRadius: '8px' }}>
+                        <div key={comment._id} style={{ display: 'flex', gap: '8px', padding: '8px', background: 'var(--bg-card-hover)', borderRadius: '8px' }}>
                           <div className="user-avatar-initials" style={{ width: '32px', height: '32px', fontSize: '0.8rem', minWidth: '32px' }}>
                             {comment.user?.fullName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'C'}
                           </div>
@@ -5391,13 +5365,13 @@ export default function AdminDashboard() {
                               <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{comment.user?.fullName || 'Citizen'}</span>
                               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleDateString()}</span>
                             </div>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#334155' }}>{comment.text}</p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'var(--text-primary)' }}>{comment.text}</p>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, padding: '12px', background: '#f8fafc', borderRadius: '8px', textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, padding: '12px', background: 'var(--bg-card-hover)', borderRadius: '8px', textAlign: 'center' }}>
                       No comments have been posted yet.
                     </p>
                   )}
@@ -5475,10 +5449,10 @@ export default function AdminDashboard() {
                 maxHeight: '80vh',
                 display: 'flex',
                 flexDirection: 'column',
-                background: '#fff',
+                background: 'var(--bg-card)',
                 borderRadius: '20px',
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--border-color)',
                 overflow: 'hidden'
               }}
             >
@@ -5497,7 +5471,7 @@ export default function AdminDashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', paddingRight: '4px', flex: 1 }}>
 
                 {/* Image Area */}
-                <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', background: '#f8fafc', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
+                <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', background: 'var(--bg-card-hover)', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
                   {selectedLostFoundItem?.image ? (
                     <img
                       src={selectedLostFoundItem.image.startsWith('http') ? selectedLostFoundItem.image : `http://localhost:5000${selectedLostFoundItem.image}`}
@@ -5559,7 +5533,7 @@ export default function AdminDashboard() {
 
                   <div style={{ marginTop: '16px' }}>
                     <span className="user-detail-label">Description</span>
-                    <p style={{ fontSize: '0.88rem', color: '#334155', margin: '4px 0 0 0', lineHeight: 1.6, background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #edf2f7' }}>
+                    <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', margin: '4px 0 0 0', lineHeight: 1.6, background: 'var(--bg-card-hover)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                       {selectedLostFoundItem?.description || 'Not provided'}
                     </p>
                   </div>
@@ -5756,20 +5730,20 @@ export default function AdminDashboard() {
                     style={{ paddingLeft: '40px', fontSize: '0.85rem' }}
                   />
                 </div>
-                <select value={paDistrictFilter} onChange={e => { setPaDistrictFilter(e.target.value); setPaPanchayatFilter(''); }} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid #cbd5e1', background: '#fff' }}>
+                <select value={paDistrictFilter} onChange={e => { setPaDistrictFilter(e.target.value); setPaPanchayatFilter(''); }} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
                   <option value="">All Districts</option>
                   {KERALA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <select value={paPanchayatFilter} onChange={e => setPaPanchayatFilter(e.target.value)} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid #cbd5e1', background: '#fff' }}>
+                <select value={paPanchayatFilter} onChange={e => setPaPanchayatFilter(e.target.value)} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
                   <option value="">All Panchayats</option>
                   {(paDistrictFilter ? getPanchayatsForDistrict(paDistrictFilter) : [...new Set(panchayatAdmins.map(p => p.panchayat).filter(Boolean))]).map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <select value={paStatusFilter} onChange={e => setPaStatusFilter(e.target.value)} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid #cbd5e1', background: '#fff' }}>
+                <select value={paStatusFilter} onChange={e => setPaStatusFilter(e.target.value)} className="admin-select" style={{ flex: 1, fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
                   <option value="All">All Statuses</option>
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
-                <button className="admin-btn secondary" onClick={() => { setPaSearchQuery(''); setPaDistrictFilter(''); setPaPanchayatFilter(''); setPaStatusFilter('All'); }} style={{ fontSize: '0.82rem', fontWeight: 700, background: '#f1f5f9' }}>
+                <button className="admin-btn secondary" onClick={() => { setPaSearchQuery(''); setPaDistrictFilter(''); setPaPanchayatFilter(''); setPaStatusFilter('All'); }} style={{ fontSize: '0.82rem', fontWeight: 700, background: 'var(--bg-card-hover)' }}>
                   Clear
                 </button>
               </div>
@@ -5780,7 +5754,7 @@ export default function AdminDashboard() {
                   <div style={{ width: '36px', height: '36px', border: '3px solid #2563eb', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
                 </div>
               ) : filteredPAs.length === 0 ? (
-                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '64px 32px', textAlign: 'center' }}>
+                <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', padding: '64px 32px', textAlign: 'center' }}>
                   <ShieldCheck size={48} style={{ color: '#e2e8f0', marginBottom: '16px' }} />
                   <h3 style={{ color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>No Panchayat Admins Found</h3>
                   <p style={{ color: '#b0bec5', fontSize: '0.85rem', marginBottom: '20px' }}>
@@ -5793,74 +5767,84 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               ) : (
-                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
                       <thead>
-                        <tr style={{ background: '#f8fafc' }}>
+                        <tr style={{ background: 'var(--bg-card-hover)' }}>
                           {['Admin', 'District / Panchayat', 'Contact', 'Code', 'Status', 'Joined', 'Actions'].map(h => (
-                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredPAs.map(pa => (
-                          <tr key={pa._id} style={{ borderBottom: '1px solid #f8fafc', transition: 'background 0.15s' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <td style={{ padding: '14px 16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #1d4ed8, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.9rem', flexShrink: 0 }}>
-                                  {pa.fullName?.[0]?.toUpperCase() || 'P'}
+                        {filteredPAs.map(pa => {
+                          const isDark = settingsSystem.theme === 'Dark';
+                          return (
+                            <tr key={pa._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #1d4ed8, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.9rem', flexShrink: 0 }}>
+                                    {pa.fullName?.[0]?.toUpperCase() || 'P'}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{pa.fullName}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{pa.email}</div>
+                                  </div>
                                 </div>
-                                <div>
-                                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.88rem' }}>{pa.fullName}</div>
-                                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{pa.email}</div>
+                              </td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.84rem' }}>{pa.district || '—'}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '1px' }}>{pa.panchayat || '—'}</div>
+                              </td>
+                              <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{pa.mobile || '—'}</td>
+                              <td style={{ padding: '14px 16px', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.8rem' }}>{pa.panchayatCode || '—'}</td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                  padding: '4px 12px', borderRadius: '20px', fontWeight: 700, fontSize: '0.75rem',
+                                  background: isDark
+                                    ? (pa.status === 'Active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)')
+                                    : (pa.status === 'Active' ? '#f0fdf4' : '#fef2f2'),
+                                  color: isDark
+                                    ? (pa.status === 'Active' ? '#4ADE80' : '#FF8A8A')
+                                    : (pa.status === 'Active' ? '#059669' : '#dc2626'),
+                                  border: isDark
+                                    ? (pa.status === 'Active' ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)')
+                                    : 'none'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: pa.status === 'Active' ? (isDark ? '#4ADE80' : '#059669') : (isDark ? '#FF8A8A' : '#dc2626'), display: 'inline-block' }} />
+                                  {pa.status || 'Active'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 16px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                                {pa.createdAt ? new Date(pa.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </td>
+                              <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <button onClick={() => { setPaViewItem(pa); setPaViewModalOpen(true); }} style={{ background: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff', color: isDark ? '#60A5FA' : '#2563eb', border: isDark ? '1px solid rgba(59, 130, 246, 0.25)' : 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Eye size={13} /> View
+                                  </button>
+                                  <button onClick={() => handleOpenPaModal(pa)} style={{ background: 'var(--bg-card-hover)', color: 'var(--text-secondary)', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Edit3 size={13} /> Edit
+                                  </button>
+                                  <button onClick={() => handleTogglePAStatus(pa)} style={{ background: isDark ? (pa.status === 'Active' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(34, 197, 94, 0.15)') : (pa.status === 'Active' ? '#fffbeb' : '#f0fdf4'), color: isDark ? (pa.status === 'Active' ? '#FBBF24' : '#4ADE80') : (pa.status === 'Active' ? '#b45309' : '#059669'), border: isDark ? (pa.status === 'Active' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(34, 197, 94, 0.25)') : 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700 }}>
+                                    {pa.status === 'Active' ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                  <button onClick={() => handleDeletePA(pa._id)} style={{ background: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2', color: isDark ? '#FF8A8A' : '#dc2626', border: isDark ? '1px solid rgba(239, 68, 68, 0.25)' : 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Trash2 size={13} />
+                                  </button>
                                 </div>
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 16px' }}>
-                              <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.84rem' }}>{pa.district || '—'}</div>
-                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>{pa.panchayat || '—'}</div>
-                            </td>
-                            <td style={{ padding: '14px 16px', color: '#475569' }}>{pa.mobile || '—'}</td>
-                            <td style={{ padding: '14px 16px', color: '#475569', fontFamily: 'monospace', fontSize: '0.8rem' }}>{pa.panchayatCode || '—'}</td>
-                            <td style={{ padding: '14px 16px' }}>
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                padding: '4px 12px', borderRadius: '20px', fontWeight: 700, fontSize: '0.75rem',
-                                background: pa.status === 'Active' ? '#f0fdf4' : '#fef2f2',
-                                color: pa.status === 'Active' ? '#059669' : '#dc2626'
-                              }}>
-                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: pa.status === 'Active' ? '#059669' : '#dc2626', display: 'inline-block' }} />
-                                {pa.status || 'Active'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '14px 16px', color: '#64748b', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
-                              {pa.createdAt ? new Date(pa.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                            </td>
-                            <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <button onClick={() => { setPaViewItem(pa); setPaViewModalOpen(true); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <Eye size={13} /> View
-                                </button>
-                                <button onClick={() => handleOpenPaModal(pa)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <Edit3 size={13} /> Edit
-                                </button>
-                                <button onClick={() => handleTogglePAStatus(pa)} style={{ background: pa.status === 'Active' ? '#fffbeb' : '#f0fdf4', color: pa.status === 'Active' ? '#b45309' : '#059669', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700 }}>
-                                  {pa.status === 'Active' ? 'Deactivate' : 'Activate'}
-                                </button>
-                                <button onClick={() => handleDeletePA(pa._id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
-                  <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', fontSize: '0.8rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
                     <span>Showing <strong>{filteredPAs.length}</strong> of <strong>{panchayatAdmins.length}</strong> Panchayat Admins</span>
                   </div>
                 </div>
@@ -5872,18 +5856,18 @@ export default function AdminDashboard() {
         {/* Add / Edit Panchayat Admin Modal */}
         {paModalOpen && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px', backdropFilter: 'blur(4px)' }}>
-            <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '680px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: 'var(--bg-card)', borderRadius: '20px', width: '100%', maxWidth: '680px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
               {/* Modal Header */}
               <div style={{ padding: '24px 28px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#1e293b' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                     {paEditingItem ? 'Edit Local Admin' : 'Add Local Admin'}
                   </h2>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                     {paEditingItem ? 'Update the admin details below.' : 'Create a new local-body administrator account.'}
                   </p>
                 </div>
-                <button onClick={() => setPaModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '10px', padding: '8px', cursor: 'pointer', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button onClick={() => setPaModalOpen(false)} style={{ background: 'var(--bg-card-hover)', border: 'none', borderRadius: '10px', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <X size={20} />
                 </button>
               </div>
@@ -5894,16 +5878,16 @@ export default function AdminDashboard() {
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>Personal Information</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Full Name <span style={{ color: '#ef4444' }}>*</span></label>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Full Name <span style={{ color: '#ef4444' }}>*</span></label>
                       <input type="text" value={paFormName} onChange={e => setPaFormName(e.target.value)} required placeholder="Enter full name" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Phone Number <span style={{ color: '#ef4444' }}>*</span></label>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Phone Number <span style={{ color: '#ef4444' }}>*</span></label>
                       <input type="tel" value={paFormPhone} onChange={e => setPaFormPhone(e.target.value)} required placeholder="10-digit mobile" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Email Address <span style={{ color: '#ef4444' }}>*</span></label>
-                      <input type="email" value={paFormEmail} onChange={e => setPaFormEmail(e.target.value)} required={!paEditingItem} disabled={!!paEditingItem} placeholder="admin@example.com" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', background: paEditingItem ? '#f8fafc' : '#fff', color: paEditingItem ? '#94a3b8' : '#1e293b' }} />
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Email Address <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="email" value={paFormEmail} onChange={e => setPaFormEmail(e.target.value)} required={!paEditingItem} disabled={!!paEditingItem} placeholder="admin@example.com" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', background: paEditingItem ? 'var(--card-inner)' : 'var(--input-bg)', color: paEditingItem ? 'var(--text-muted)' : 'var(--text-primary)' }} />
                       {paEditingItem && <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', display: 'block' }}>Email cannot be changed after creation.</span>}
                     </div>
                   </div>
@@ -5914,14 +5898,14 @@ export default function AdminDashboard() {
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>Location Assignment</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>District <span style={{ color: '#ef4444' }}>*</span></label>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>District <span style={{ color: '#ef4444' }}>*</span></label>
                       <select value={paFormDistrict} onChange={e => { const dist = e.target.value; setPaFormDistrict(dist); setPaFormPanchayat(''); setPaFormPanchayatCode(''); setPaAvailablePanchayats(getPanchayatsForDistrict(dist)); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
                         <option value="">Select District</option>
                         {KERALA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Local Body Type</label>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Local Body Type</label>
                       <select value={paFormLocalBodyType} onChange={e => { setPaFormLocalBodyType(e.target.value); setPaFormPanchayat(''); setPaFormPanchayatCode(''); }} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
                         <option value="Panchayath">Panchayath</option>
                         <option value="Municipality">Municipality</option>
@@ -5929,7 +5913,7 @@ export default function AdminDashboard() {
                     </div>
                     {paFormLocalBodyType === 'Panchayath' ? (
                       <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Panchayath <span style={{ color: '#ef4444' }}>*</span></label>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Panchayath <span style={{ color: '#ef4444' }}>*</span></label>
                         <select value={paFormPanchayat} onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
                           <option value="">{paFormDistrict ? 'Select Panchayath' : 'Select District first'}</option>
                           {getLocationsByDistrictAndType(paFormDistrict, 'PANCHAYATH').map(loc => (
@@ -5939,7 +5923,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <div style={{ gridColumn: 'span 2' }}>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Municipality <span style={{ color: '#ef4444' }}>*</span></label>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Municipality <span style={{ color: '#ef4444' }}>*</span></label>
                         <select value={paFormPanchayat} onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
                           <option value="">{paFormDistrict ? 'Select Municipality' : 'Select District first'}</option>
                           {getLocationsByDistrictAndType(paFormDistrict, 'MUNICIPALITY').map(loc => (
@@ -5957,11 +5941,11 @@ export default function AdminDashboard() {
                     <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', paddingBottom: '6px', borderBottom: '1px solid #f1f5f9' }}>Access Credentials</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                       <div>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Password <span style={{ color: '#ef4444' }}>*</span></label>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Password <span style={{ color: '#ef4444' }}>*</span></label>
                         <input type="password" value={paFormPassword} onChange={e => setPaFormPassword(e.target.value)} required placeholder="Min. 8 characters" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Confirm Password <span style={{ color: '#ef4444' }}>*</span></label>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Confirm Password <span style={{ color: '#ef4444' }}>*</span></label>
                         <input type="password" value={paFormConfirmPassword} onChange={e => setPaFormConfirmPassword(e.target.value)} required placeholder="Re-enter password" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
                       </div>
                     </div>
@@ -5970,11 +5954,34 @@ export default function AdminDashboard() {
 
                 {/* Status */}
                 <div style={{ marginBottom: '24px' }}>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Status</label>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Status</label>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     {['Active', 'Inactive'].map(s => (
                       <button key={s} type="button" onClick={() => setPaFormStatus(s)}
-                        style={{ flex: 1, padding: '10px', borderRadius: '10px', border: `2px solid ${paFormStatus === s ? (s === 'Active' ? '#059669' : '#dc2626') : '#e2e8f0'}`, background: paFormStatus === s ? (s === 'Active' ? '#f0fdf4' : '#fef2f2') : '#fff', color: paFormStatus === s ? (s === 'Active' ? '#059669' : '#dc2626') : '#64748b', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          borderRadius: '10px',
+                          border: `2px solid ${
+                            paFormStatus === s
+                              ? (s === 'Active' ? '#059669' : '#dc2626')
+                              : 'var(--border-color)'
+                          }`,
+                          background: paFormStatus === s
+                            ? (s === 'Active'
+                                ? (settingsSystem.theme === 'Dark' ? '#1b3025' : '#f0fdf4')
+                                : (settingsSystem.theme === 'Dark' ? '#3b1818' : '#fef2f2'))
+                            : 'var(--input-bg)',
+                          color: paFormStatus === s
+                            ? (s === 'Active'
+                                ? (settingsSystem.theme === 'Dark' ? '#32C56D' : '#059669')
+                                : (settingsSystem.theme === 'Dark' ? '#ff6b6b' : '#dc2626'))
+                            : 'var(--text-muted)',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}>
                         {s}
                       </button>
                     ))}
@@ -5996,21 +6003,21 @@ export default function AdminDashboard() {
         {/* View Panchayat Admin Modal */}
         {paViewModalOpen && paViewItem && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px', backdropFilter: 'blur(4px)' }}>
-            <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '540px', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: 'var(--bg-card)', borderRadius: '20px', width: '100%', maxWidth: '540px', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
               <div style={{ padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'linear-gradient(135deg, #1d4ed8, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.3rem' }}>
                     {paViewItem.fullName?.[0]?.toUpperCase() || 'P'}
                   </div>
                   <div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>{paViewItem.fullName}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{paViewItem.email}</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{paViewItem.fullName}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{paViewItem.email}</div>
                     <span style={{ display: 'inline-block', marginTop: '4px', padding: '2px 10px', borderRadius: '20px', fontWeight: 700, fontSize: '0.72rem', background: paViewItem.status === 'Active' ? '#f0fdf4' : '#fef2f2', color: paViewItem.status === 'Active' ? '#059669' : '#dc2626' }}>
                       {paViewItem.status || 'Active'}
                     </span>
                   </div>
                 </div>
-                <button onClick={() => setPaViewModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '10px', padding: '8px', cursor: 'pointer', color: '#475569', display: 'flex' }}>
+                <button onClick={() => setPaViewModalOpen(false)} style={{ background: 'var(--bg-card-hover)', border: 'none', borderRadius: '10px', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}>
                   <X size={18} />
                 </button>
               </div>
@@ -6024,9 +6031,9 @@ export default function AdminDashboard() {
                     { label: 'Panchayath Code', value: paViewItem.panchayatCode || '—' },
                     { label: 'Account Created', value: paViewItem.createdAt ? new Date(paViewItem.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
                   ].map((item, i) => (
-                    <div key={i} style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px' }}>
+                    <div key={i} style={{ background: 'var(--bg-card-hover)', borderRadius: '10px', padding: '12px' }}>
                       <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>{item.label}</div>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#1e293b' }}>{item.value}</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{item.value}</div>
                     </div>
                   ))}
                 </div>

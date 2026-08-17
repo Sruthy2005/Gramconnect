@@ -1189,3 +1189,381 @@
     font-size: 0.8rem;
   }
 }
+
+/* ==========================================
+   DARK MODE OVERRIDES FOR MY COMPLAINTS PAGE
+   ========================================== */
+
+/* Remove header card background */
+.dark-theme .complaints-header-card {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 0 16px 0 !important;
+}
+
+.dark-theme .complaints-header-title {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .complaints-header-desc {
+  color: var(--text-secondary) !important;
+}
+
+/* Stat Cards in Dark Mode */
+.dark-theme .complaints-stats-grid .stat-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+.dark-theme .complaints-stats-grid .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(25, 166, 90, 0.15) !important;
+}
+
+.dark-theme .stat-card-title {
+  color: var(--text-muted) !important;
+}
+
+.dark-theme .stat-card-value {
+  color: var(--text-primary) !important;
+}
+
+/* Stat icons wrapper colors */
+.dark-theme .stat-icon-wrapper.total {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #60A5FA !important;
+}
+
+.dark-theme .stat-icon-wrapper.pending {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #FBBF24 !important;
+}
+
+.dark-theme .stat-icon-wrapper.progress {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #60A5FA !important;
+}
+
+.dark-theme .stat-icon-wrapper.resolved {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #4ADE80 !important;
+}
+
+/* Search, Filter & Sort Controls Panel in Dark Mode */
+.dark-theme .complaints-controls-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+.dark-theme .complaints-search-input {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .complaints-sort-select {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-clear-search {
+  background: var(--card-inner) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .status-filter-tabs {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .status-tab-btn {
+  color: var(--text-muted) !important;
+}
+
+.dark-theme .status-tab-btn:hover {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .status-tab-btn.active {
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary) !important;
+}
+
+.dark-theme .tab-count {
+  background: var(--card-inner) !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .status-tab-btn.active .tab-count {
+  background: var(--primary-light) !important;
+  color: var(--primary) !important;
+}
+
+/* Table Cards and Layout in Dark Mode */
+.dark-theme .table-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .my-complaints-table th {
+  background-color: var(--card-inner) !important;
+  color: #D8E4DD !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .my-complaints-table td {
+  background-color: var(--card-bg) !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .my-complaints-table tbody tr:nth-child(even) td {
+  background-color: #13221C !important;
+}
+
+.dark-theme .my-complaints-table tbody tr:hover td {
+  background-color: #192E24 !important;
+}
+
+.dark-theme .col-id {
+  color: var(--primary) !important;
+}
+
+.dark-theme .category-text {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .col-title,
+.dark-theme .col-location,
+.dark-theme .col-date,
+.dark-theme .col-priority {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .urgent-badge-inline {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #FF8A8A !important;
+  border: 1px solid rgba(239, 68, 68, 0.25) !important;
+}
+
+/* Badges Status Outlines inside table */
+.dark-theme .status-badge-outline.pending {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  color: #FF8A8A !important;
+  border: 1px solid rgba(239, 68, 68, 0.25) !important;
+}
+
+.dark-theme .status-badge-outline.verified {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  color: #60A5FA !important;
+  border: 1px solid rgba(59, 130, 246, 0.25) !important;
+}
+
+.dark-theme .status-badge-outline.in-progress {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #FBBF24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+}
+
+.dark-theme .status-badge-outline.resolved {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+  color: #4ADE80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.25) !important;
+}
+
+.dark-theme .status-badge-outline.rejected {
+  background-color: rgba(220, 38, 38, 0.15) !important;
+  color: #FF8A8A !important;
+  border: 1px solid rgba(220, 38, 38, 0.25) !important;
+}
+
+/* Action Buttons inside Table */
+.dark-theme .btn-action-view,
+.dark-theme .btn-action-track,
+.dark-theme .btn-action-edit,
+.dark-theme .btn-action-cancel,
+.dark-theme .btn-action-pdf {
+  background: var(--card-inner) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-action-view:hover {
+  background: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
+}
+
+.dark-theme .btn-action-track:hover {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #60A5FA !important;
+  border-color: #60A5FA !important;
+}
+
+.dark-theme .btn-action-edit:hover {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #FBBF24 !important;
+  border-color: #FBBF24 !important;
+}
+
+.dark-theme .btn-action-cancel:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #FF8A8A !important;
+  border-color: #FF8A8A !important;
+}
+
+.dark-theme .btn-action-pdf:hover {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #4ADE80 !important;
+  border-color: #4ADE80 !important;
+}
+
+/* Pagination panel in Dark Mode */
+.dark-theme .complaints-pagination-wrapper {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .btn-pagination-nav {
+  background: var(--card-inner) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-pagination-nav:hover:not(:disabled) {
+  background: var(--bg-card-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .btn-pagination-page {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-pagination-page:hover {
+  background: var(--card-inner) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .btn-pagination-page.active {
+  background: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
+}
+
+/* Detail & Edit Modal Panels in Dark Mode */
+.dark-theme .modal-content-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .modal-header-row {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .modal-subtitle {
+  color: var(--text-muted) !important;
+}
+
+.dark-theme .modal-title {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .btn-close-modal {
+  background: var(--card-inner) !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-close-modal:hover {
+  background: var(--bg-card-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .detail-section-title {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .detail-description-text {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .gallery-img-link {
+  border: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .status-summary-card,
+.dark-theme .location-summary-card {
+  background: var(--card-inner) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .status-label {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .status-val {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .location-address-list {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .modal-map-wrapper {
+  border: 1px solid var(--border-color) !important;
+}
+
+/* Edit Form elements inside modal */
+.dark-theme .form-label {
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .form-input,
+.dark-theme .form-textarea {
+  background-color: var(--input-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Mobile cards in Dark Mode */
+.dark-theme .mobile-complaint-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.dark-theme .card-divider {
+  background: var(--border-color) !important;
+}
+
+.dark-theme .info-lbl {
+  color: var(--text-muted) !important;
+}
+
+.dark-theme .info-val {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-mobile-act {
+  background: var(--card-inner) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .btn-mobile-act.view:hover { background: var(--primary) !important; color: white !important; }
+.dark-theme .btn-mobile-act.track:hover { background: rgba(59, 130, 246, 0.15) !important; color: #60A5FA !important; }
+.dark-theme .btn-mobile-act.edit:hover { background: rgba(245, 158, 11, 0.15) !important; color: #FBBF24 !important; }
+.dark-theme .btn-mobile-act.delete:hover { background: rgba(239, 68, 68, 0.15) !important; color: #FF8A8A !important; }
+.dark-theme .btn-mobile-act.pdf:hover { background: rgba(34, 197, 94, 0.15) !important; color: #4ADE80 !important; }
+
+/* Empty state in Dark Mode */
+.dark-theme .empty-complaints-card h4 {
+  color: var(--text-primary) !important;
+}
+.dark-theme .empty-complaints-card p {
+  color: var(--text-secondary) !important;
+}
+.dark-theme .empty-state-icon {
+  color: var(--text-muted) !important;
+}
