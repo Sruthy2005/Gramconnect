@@ -62,33 +62,6 @@ export default function App() {
     };
   }, []);
 
-  // Centralized Google Identity Services Initialization
-  useEffect(() => {
-    let checkInterval;
-    const initGoogleGsi = () => {
-      if (window.google && window.google.accounts && window.google.accounts.id) {
-        clearInterval(checkInterval);
-        console.log('[DEV] Centralized Google Identity Services Initializing...');
-        window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-          callback: (response) => {
-            console.log('[DEV] Centralized Google Auth Callback triggered.');
-            if (window.handleGoogleLoginSuccess) {
-              window.handleGoogleLoginSuccess(response);
-            } else {
-              console.warn('[DEV] Centralized Google Auth callback fired, but handleGoogleLoginSuccess is not set.');
-            }
-          }
-        });
-      }
-    };
-
-    initGoogleGsi();
-    checkInterval = setInterval(initGoogleGsi, 100);
-
-    return () => clearInterval(checkInterval);
-  }, []);
-
 
   // Central Auth Routing Protection
   useEffect(() => {

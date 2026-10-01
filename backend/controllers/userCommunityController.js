@@ -105,7 +105,29 @@ const getApprovedPosts = asyncHandler(async (req, res) => {
  * @access  Private (Citizen)
  */
 const createPost = asyncHandler(async (req, res) => {
-  const { caption, category, image, images = [], video = '', visibility = 'Public', district, districtTarget = 'ALL' } = req.body;
+  const { caption, category, image, images = [], video = '', visibility = 'Public', district, location, districtTarget = 'ALL' } = req.body;
+
+  // ── Validation ──────────────────────────────────────────────────────────
+  const KERALA_DISTRICTS = [
+    'Thiruvananthapuram', 'Kollam', 'Pathanamthitta', 'Alappuzha', 'Kottayam',
+    'Idukki', 'Ernakulam', 'Thrissur', 'Palakkad', 'Malappuram',
+    'Kozhikode', 'Wayanad', 'Kannur', 'Kasaragod'
+  ];
+
+  if (!caption || !caption.trim()) {
+    return res.status(400).json({ success: false, message: 'Caption is required.' });
+  }
+  if (!category || !category.trim()) {
+    return res.status(400).json({ success: false, message: 'Category is required.' });
+  }
+
+  const resolvedDistrict = (district || location || req.user.district || '').trim();
+  if (!resolvedDistrict) {
+    return res.status(400).json({ success: false, message: 'Location (district) is required.' });
+  }
+  if (!KERALA_DISTRICTS.includes(resolvedDistrict)) {
+    return res.status(400).json({ success: false, message: 'Please select a valid Kerala district.' });
+  }
 
   let imageUrl = '';
   if (req.file) {
@@ -114,25 +136,18 @@ const createPost = asyncHandler(async (req, res) => {
     imageUrl = image;
   }
 
-  if (!caption) {
-    return res.status(400).json({ success: false, message: 'Caption is required' });
-  }
-  if (!imageUrl) {
-    return res.status(400).json({ success: false, message: 'An image upload is required' });
-  }
-
   const userRole = req.user.role ? req.user.role.toLowerCase() : 'citizen';
   const isAdmin = ['admin', 'super_admin', 'panchayat_admin'].includes(userRole);
 
   const post = await CommunityPost.create({
     user: req.user.id,
-    caption,
-    category,
+    caption: caption.trim(),
+    category: category.trim(),
     image: imageUrl,
-    images: images.length ? images : [imageUrl],
+    images: images.length ? images : (imageUrl ? [imageUrl] : []),
     video,
     visibility,
-    district: district || req.user.district || 'Ernakulam',
+    district: resolvedDistrict,
     status: isAdmin ? 'Approved' : 'Pending',
     role: isAdmin ? 'admin' : 'citizen',
     isOfficial: isAdmin,
@@ -185,7 +200,30 @@ const editPost = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Post can only be edited while pending approval.' });
   }
 
-  const { caption, category, image, images, video, visibility, district, districtTarget } = req.body;
+  const { caption, category, image, images, video, visibility, district, location, districtTarget } = req.body;
+
+  // ── Validation ──────────────────────────────────────────────────────────
+  const KERALA_DISTRICTS = [
+    'Thiruvananthapuram', 'Kollam', 'Pathanamthitta', 'Alappuzha', 'Kottayam',
+    'Idukki', 'Ernakulam', 'Thrissur', 'Palakkad', 'Malappuram',
+    'Kozhikode', 'Wayanad', 'Kannur', 'Kasaragod'
+  ];
+
+  if (caption !== undefined && !caption.trim()) {
+    return res.status(400).json({ success: false, message: 'Caption cannot be empty.' });
+  }
+  if (category !== undefined && !category.trim()) {
+    return res.status(400).json({ success: false, message: 'Category cannot be empty.' });
+  }
+  const resolvedDistrict = district || location;
+  if (resolvedDistrict !== undefined && resolvedDistrict !== null) {
+    if (!resolvedDistrict.trim()) {
+      return res.status(400).json({ success: false, message: 'Location (district) cannot be empty.' });
+    }
+    if (!KERALA_DISTRICTS.includes(resolvedDistrict.trim())) {
+      return res.status(400).json({ success: false, message: 'Please select a valid Kerala district.' });
+    }
+  }
 
   let imageUrl = post.image;
   if (req.file) {
@@ -194,13 +232,13 @@ const editPost = asyncHandler(async (req, res) => {
     imageUrl = image;
   }
 
-  if (caption) post.caption = caption;
-  if (category) post.category = category;
+  if (caption) post.caption = caption.trim();
+  if (category) post.category = category.trim();
   post.image = imageUrl;
   post.images = images && images.length ? images : [imageUrl];
   if (video !== undefined) post.video = video;
   if (visibility) post.visibility = visibility;
-  if (district) post.district = district;
+  if (resolvedDistrict) post.district = resolvedDistrict.trim();
   if (districtTarget && isAdmin) {
     post.districtTarget = districtTarget;
   }

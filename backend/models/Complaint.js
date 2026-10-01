@@ -12,6 +12,11 @@ const complaintSchema = new mongoose.Schema(
       ref: 'User',
       required: true
     },
+    panchayatId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Panchayat',
+      default: null
+    },
     title: {
       type: String,
       required: [true, 'Please add a title'],
@@ -27,9 +32,12 @@ const complaintSchema = new mongoose.Schema(
       required: [true, 'Please select a category'],
       enum: [
         'Road Damage',
+        'Garbage/Waste',
         'Garbage',
-        'Water Supply',
         'Drainage',
+        'Water Leakage',
+        'Water Supply',
+        'Streetlight',
         'Street Light',
         'Electricity',
         'Public Safety',
@@ -121,10 +129,27 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    aiConfidence: {
+      type: Number,
+      default: 0
+    },
     aiSeverity: {
       type: String,
       enum: ['Low', 'Medium', 'High', 'Critical'],
       default: 'Low'
+    },
+    isDuplicate: {
+      type: Boolean,
+      default: false
+    },
+    duplicateOf: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Complaint',
+      default: null
+    },
+    duplicateConfidence: {
+      type: Number,
+      default: 0
     }
   },
   {

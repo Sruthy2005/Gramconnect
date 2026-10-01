@@ -367,3 +367,65 @@
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* AI Category Assistant Styling */
+.ai-detect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-weight: 600;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.ai-detect-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+.ai-apply-suggestion-box {
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-apply-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: white;
+  background: #2563eb;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-apply-ai:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+

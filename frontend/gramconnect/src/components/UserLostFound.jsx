@@ -33,7 +33,9 @@ const UserLostFound = ({ showToast }) => {
   const [formDate, setFormDate] = useState('');
   const [formContact, setFormContact] = useState('');
   const [formImage, setFormImage] = useState(null);
+  const [formImageName, setFormImageName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
 
   const fetchItems = async () => {
     setLoading(true);
@@ -56,28 +58,86 @@ const UserLostFound = ({ showToast }) => {
   }, []);
 
   const handleImageChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setFormImage(e.target.files[0]);
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      setFormErrors(prev => ({ ...prev, image: 'Only JPG, PNG, and WEBP images are allowed.' }));
+      e.target.value = '';
+      return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      setFormErrors(prev => ({ ...prev, image: 'Image size must not exceed 5MB.' }));
+      e.target.value = '';
+      return;
+    }
+    setFormErrors(prev => ({ ...prev, image: '' }));
+    setFormImage(file);
+    setFormImageName(file.name);
+  };
+
+  const resetForm = () => {
+    setFormType('Lost');
+    setFormName('');
+    setFormCategory('Mobile / Electronics');
+    setFormDescription('');
+    setFormLocation('');
+    setFormDate('');
+    setFormContact('');
+    setFormImage(null);
+    setFormImageName('');
+    setFormErrors({});
+  };
+
+  // Validation helpers
+  const validateContact = (val) => {
+    const phoneRegex = /^[+]?[\d\s\-().]{7,15}$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return phoneRegex.test(val.trim()) || emailRegex.test(val.trim());
+  };
+
+  const getTodayStr = () => {
+    const d = new Date();
+    return d.toISOString().split('T')[0]; // 'YYYY-MM-DD'
   };
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!formName || !formDescription || !formLocation || !formDate || !formContact) {
-      if (showToast) showToast('Please fill in all required fields.', 'error');
-      else alert('Please fill in all required fields.');
+
+    // ── Per-field validation ────────────────────────────────────────────────
+    const errors = {};
+    if (!formType) errors.type = 'Report Type is required.';
+    if (!formName.trim()) errors.name = 'Item Name is required.';
+    if (!formCategory) errors.category = 'Category is required.';
+    if (!formDescription.trim()) errors.description = 'Description is required.';
+    if (!formLocation.trim()) errors.location = 'Location is required.';
+    else if (formLocation.trim().length < 3) errors.location = 'Enter a more specific location.';
+    if (!formDate) {
+      errors.date = 'Date is required.';
+    } else if (formDate > getTodayStr()) {
+      errors.date = 'Date cannot be in the future.';
+    }
+    if (!formContact.trim()) {
+      errors.contact = 'Contact Information is required.';
+    } else if (!validateContact(formContact)) {
+      errors.contact = 'Enter a valid phone number or email address.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
+    setFormErrors({});
 
     setSubmitting(true);
     const formData = new FormData();
     formData.append('type', formType);
-    formData.append('itemName', formName);
+    formData.append('itemName', formName.trim());
     formData.append('category', formCategory);
-    formData.append('description', formDescription);
-    formData.append('location', formLocation);
+    formData.append('description', formDescription.trim());
+    formData.append('location', formLocation.trim());
     formData.append('date', formDate);
-    formData.append('contactInformation', formContact);
+    formData.append('contactInformation', formContact.trim());
     if (formImage) {
       formData.append('image', formImage);
     }
@@ -90,18 +150,12 @@ const UserLostFound = ({ showToast }) => {
         if (showToast) showToast('Post published successfully!');
         else alert('Post published successfully!');
         setCreateModalOpen(false);
-        // Reset form
-        setFormName('');
-        setFormDescription('');
-        setFormLocation('');
-        setFormDate('');
-        setFormContact('');
-        setFormImage(null);
+        resetForm();
         fetchItems();
       }
     } catch (err) {
       console.error('[DEV ERROR] Failed to create item:', err);
-      const errMsg = err.message || err.error || 'Unable to submit the report. Please check the required fields and try again.';
+      const errMsg = err.response?.data?.message || err.message || 'Unable to submit the report. Please check the required fields and try again.';
       if (showToast) showToast(errMsg, 'error');
       else alert(errMsg);
     } finally {
@@ -489,28 +543,53 @@ const UserLostFound = ({ showToast }) => {
             </div>
 
             <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Report Type */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Report Type *</label>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40px', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', background: formType === 'Lost' ? '#fee2e2' : '#fff', color: formType === 'Lost' ? '#ef4444' : '#475569', fontWeight: 700 }}>
-                    <input type="radio" name="type" value="Lost" checked={formType === 'Lost'} onChange={() => setFormType('Lost')} style={{ display: 'none' }} />
+                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40px', border: `1px solid ${formErrors.type ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', cursor: 'pointer', background: formType === 'Lost' ? '#fee2e2' : '#fff', color: formType === 'Lost' ? '#ef4444' : '#475569', fontWeight: 700 }}>
+                    <input type="radio" name="type" value="Lost" checked={formType === 'Lost'} onChange={() => { setFormType('Lost'); setFormErrors(prev => ({ ...prev, type: '' })); }} style={{ display: 'none' }} />
                     Lost
                   </label>
-                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40px', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', background: formType === 'Found' ? '#d1fae5' : '#fff', color: formType === 'Found' ? '#10b981' : '#475569', fontWeight: 700 }}>
-                    <input type="radio" name="type" value="Found" checked={formType === 'Found'} onChange={() => setFormType('Found')} style={{ display: 'none' }} />
+                  <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40px', border: `1px solid ${formErrors.type ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', cursor: 'pointer', background: formType === 'Found' ? '#d1fae5' : '#fff', color: formType === 'Found' ? '#10b981' : '#475569', fontWeight: 700 }}>
+                    <input type="radio" name="type" value="Found" checked={formType === 'Found'} onChange={() => { setFormType('Found'); setFormErrors(prev => ({ ...prev, type: '' })); }} style={{ display: 'none' }} />
                     Found
                   </label>
                 </div>
+                {formErrors.type && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.type}</span>}
               </div>
 
+              {/* Item Name + Category */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Item Name *</label>
-                  <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} required style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} placeholder="e.g. Black Leather Wallet" />
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormName(val);
+                      if (!val.trim()) setFormErrors(prev => ({ ...prev, name: 'Item Name is required.' }));
+                      else setFormErrors(prev => ({ ...prev, name: '' }));
+                    }}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', border: `1px solid ${formErrors.name ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                    placeholder="e.g. Black Leather Wallet"
+                  />
+                  {formErrors.name && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.name}</span>}
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Category *</label>
-                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#fff' }}>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormCategory(val);
+                      if (!val) setFormErrors(prev => ({ ...prev, category: 'Category is required.' }));
+                      else setFormErrors(prev => ({ ...prev, category: '' }));
+                    }}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', border: `1px solid ${formErrors.category ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', fontSize: '0.85rem', background: '#fff', boxSizing: 'border-box' }}
+                  >
+                    <option value="">Select Category</option>
                     <option value="Documents">Documents</option>
                     <option value="Mobile / Electronics">Mobile / Electronics</option>
                     <option value="Keys">Keys</option>
@@ -519,37 +598,101 @@ const UserLostFound = ({ showToast }) => {
                     <option value="Pets">Pets</option>
                     <option value="Other">Other</option>
                   </select>
+                  {formErrors.category && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.category}</span>}
                 </div>
               </div>
 
+              {/* Description */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Description *</label>
-                <textarea value={formDescription} onChange={(e) => setFormDescription(e.target.value)} required rows={3} style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} placeholder="Provide specific details like brand, colors, landmarks..." />
+                <textarea
+                  value={formDescription}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormDescription(val);
+                    if (!val.trim()) setFormErrors(prev => ({ ...prev, description: 'Description is required.' }));
+                    else setFormErrors(prev => ({ ...prev, description: '' }));
+                  }}
+                  rows={3}
+                  style={{ width: '100%', padding: '10px 12px', border: `1px solid ${formErrors.description ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box', resize: 'vertical' }}
+                  placeholder="Provide specific details like brand, colors, landmarks..."
+                />
+                {formErrors.description && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.description}</span>}
               </div>
 
+              {/* Location + Date */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Location *</label>
-                  <input type="text" value={formLocation} onChange={(e) => setFormLocation(e.target.value)} required style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} placeholder="e.g. Near bus terminal" />
+                  <input
+                    type="text"
+                    value={formLocation}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormLocation(val);
+                      if (!val.trim()) setFormErrors(prev => ({ ...prev, location: 'Location is required.' }));
+                      else if (val.trim().length < 3) setFormErrors(prev => ({ ...prev, location: 'Enter a more specific location.' }));
+                      else setFormErrors(prev => ({ ...prev, location: '' }));
+                    }}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', border: `1px solid ${formErrors.location ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                    placeholder="e.g. Near bus terminal"
+                  />
+                  {formErrors.location && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.location}</span>}
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Date Lost / Found *</label>
-                  <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} required style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} />
+                  <input
+                    type="date"
+                    value={formDate}
+                    max={getTodayStr()}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormDate(val);
+                      if (!val) setFormErrors(prev => ({ ...prev, date: 'Date is required.' }));
+                      else if (val > getTodayStr()) setFormErrors(prev => ({ ...prev, date: 'Date cannot be in the future.' }));
+                      else setFormErrors(prev => ({ ...prev, date: '' }));
+                    }}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', border: `1px solid ${formErrors.date ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                  />
+                  {formErrors.date && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.date}</span>}
                 </div>
               </div>
 
+              {/* Contact Information */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Contact Information *</label>
-                <input type="text" value={formContact} onChange={(e) => setFormContact(e.target.value)} required style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem' }} placeholder="e.g. Mobile number, email, or instructions..." />
+                <input
+                  type="text"
+                  value={formContact}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormContact(val);
+                    if (!val.trim()) setFormErrors(prev => ({ ...prev, contact: 'Contact Information is required.' }));
+                    else if (!validateContact(val)) setFormErrors(prev => ({ ...prev, contact: 'Enter a valid phone number or email address.' }));
+                    else setFormErrors(prev => ({ ...prev, contact: '' }));
+                  }}
+                  style={{ width: '100%', height: '40px', padding: '0 12px', border: `1px solid ${formErrors.contact ? '#ef4444' : '#cbd5e1'}`, borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                  placeholder="e.g. 9876543210 or email@example.com"
+                />
+                {formErrors.contact && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.contact}</span>}
               </div>
 
+              {/* Image Upload */}
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Upload Image</label>
-                <input type="file" accept="image/*" onChange={handleImageChange} style={{ fontSize: '0.85rem' }} />
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Upload Image <span style={{ fontSize: '0.68rem', fontWeight: 400, color: '#94a3b8', textTransform: 'none' }}>(Optional — JPG, PNG, WEBP · max 5MB)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handleImageChange}
+                  style={{ fontSize: '0.85rem', border: `1px solid ${formErrors.image ? '#ef4444' : 'transparent'}`, borderRadius: '6px', padding: '2px' }}
+                />
+                {formErrors.image && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{formErrors.image}</span>}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #edf2f7', paddingTop: '16px', marginTop: '8px' }}>
-                <button type="button" className="admin-btn secondary" onClick={() => setCreateModalOpen(false)}>Cancel</button>
+                <button type="button" className="admin-btn secondary" onClick={() => { setCreateModalOpen(false); resetForm(); }}>Cancel</button>
                 <button type="submit" className="admin-btn primary" disabled={submitting}>
                   {submitting ? 'Publishing...' : 'Publish Post'}
                 </button>

@@ -900,7 +900,14 @@ export default function UserDashboard() {
                           recentComplaints.map((c) => (
                             <tr key={c._id}>
                               <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{c.complaintId}</td>
-                              <td style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{c.category}</td>
+                              <td style={{ fontWeight: 600, color: 'var(--text-dark)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span>{c.category}</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 700 }}>
+                                    🤖 {c.aiCategory || c.category}
+                                  </span>
+                                </div>
+                              </td>
                               <td>{new Date(c.createdAt).toLocaleDateString()}</td>
                               <td>
                                 <span className={`status-badge-outline ${c.status.toLowerCase().replace(' ', '-')}`}>

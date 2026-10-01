@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Navigation, Image as ImageIcon, Trash2, Send, AlertTriangle, Loader2 } from 'lucide-react';
+import { MapPin, Navigation, Image as ImageIcon, Trash2, Send, AlertTriangle, Loader2, Sparkles, Check } from 'lucide-react';
 import api from '../utils/api';
 import './ReportIssuePage.css';
 
@@ -443,18 +443,51 @@ export default function ReportIssuePage({ onNavigate }) {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [toasts, setToasts] = useState([]);
 
+  const [aiDetectedCategory, setAiDetectedCategory] = useState('');
+  const [aiConfidence, setAiConfidence] = useState(0);
+  const [isClassifying, setIsClassifying] = useState(false);
+
   const categories = [
     'Road Damage',
-    'Garbage',
-    'Water Supply',
+    'Garbage/Waste',
     'Drainage',
-    'Street Light',
-    'Electricity',
-    'Public Safety',
-    'Traffic',
-    'Environment',
+    'Water Leakage',
+    'Streetlight',
     'Other'
   ];
+
+  // Real-time AI complaint categorization
+  useEffect(() => {
+    const textToAnalyze = `${title.trim()} ${description.trim()}`;
+    if (textToAnalyze.length < 8) {
+      setAiDetectedCategory('');
+      setAiConfidence(0);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsClassifying(true);
+        const res = await api.post('/issues/classify', {
+          title: title.trim(),
+          description: description.trim()
+        });
+        if (res.data && res.data.success && res.data.category) {
+          setAiDetectedCategory(res.data.category);
+          setAiConfidence(res.data.confidence || 0.95);
+          // Auto-select if category is not yet selected by citizen
+          setCategory((prev) => (!prev ? res.data.category : prev));
+          if (errors.category) setErrors((prev) => ({ ...prev, category: '' }));
+        }
+      } catch (err) {
+        console.debug('AI classification preview skipped:', err);
+      } finally {
+        setIsClassifying(false);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [title, description]);
 
   const showToast = (message, type = 'success') => {
     const id = Date.now();
@@ -544,9 +577,10 @@ export default function ReportIssuePage({ onNavigate }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const activeCat = category || aiDetectedCategory;
     const newErrors = {};
     if (!title.trim()) newErrors.title = 'Title is required';
-    if (!category) newErrors.category = 'Category is required';
+    if (!activeCat) newErrors.category = 'Category is required';
     if (!description.trim()) {
       newErrors.description = 'Description is required';
     } else if (description.trim().length < 20) {
@@ -593,7 +627,7 @@ export default function ReportIssuePage({ onNavigate }) {
     const formData = new FormData();
     formData.append('title', title.trim());
     formData.append('description', description.trim());
-    formData.append('category', category);
+    formData.append('category', activeCat);
     formData.append('state', state.trim());
     formData.append('district', district.trim());
     formData.append('taluk', taluk.trim());
@@ -625,6 +659,8 @@ export default function ReportIssuePage({ onNavigate }) {
         setTitle('');
         setDescription('');
         setCategory('');
+        setAiDetectedCategory('');
+        setAiConfidence(0);
         setDistrict('');
         setDistrictSearch('');
         setTaluk('');
@@ -703,7 +739,20 @@ export default function ReportIssuePage({ onNavigate }) {
           </div>
 
           <div className="input-field-group">
-            <label className="input-label" htmlFor="issue-category">Category <span className="req">*</span></label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label className="input-label" htmlFor="issue-category" style={{ margin: 0 }}>Category <span className="req">*</span></label>
+              {isClassifying ? (
+                <span className="ai-detect-status">
+                  <Loader2 size={12} className="spin-icon" /> AI analyzing issue...
+                </span>
+              ) : aiDetectedCategory ? (
+                <span className="ai-detect-badge">
+                  <Sparkles size={12} style={{ color: '#2563eb' }} />
+                  <span>AI Detected: <strong>{aiDetectedCategory}</strong> ({Math.round(aiConfidence * 100)}%)</span>
+                </span>
+              ) : null}
+            </div>
+
             <select
               id="issue-category"
               className="report-input select"
@@ -714,11 +763,33 @@ export default function ReportIssuePage({ onNavigate }) {
               }}
               required
             >
-              <option value="">Select Category</option>
+              <option value="">Select Category (or Auto-detect via AI)</option>
               {categories.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat}>
+                  {cat} {aiDetectedCategory === cat ? '✨ (AI Match)' : ''}
+                </option>
               ))}
             </select>
+
+            {aiDetectedCategory && category !== aiDetectedCategory && (
+              <div className="ai-apply-suggestion-box">
+                <span style={{ fontSize: '0.82rem', color: '#1e40af' }}>
+                  <Sparkles size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} />
+                  AI suggests classifying as <strong>{aiDetectedCategory}</strong> based on your description.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategory(aiDetectedCategory);
+                    if (errors.category) setErrors(prev => ({ ...prev, category: '' }));
+                  }}
+                  className="btn-apply-ai"
+                >
+                  <Check size={13} /> Apply {aiDetectedCategory}
+                </button>
+              </div>
+            )}
+
             {errors.category && (
               <span className="form-error-inline">
                 <AlertTriangle size={12} /> {errors.category}

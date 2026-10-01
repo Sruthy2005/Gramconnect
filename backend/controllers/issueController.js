@@ -1,14 +1,20 @@
 const Complaint = require('../models/Complaint');
+const Panchayat = require('../models/Panchayat');
 const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const { createNotification } = require('../utils/notificationHelper');
+const { classifyComplaint, CATEGORY_DEPARTMENT_MAP } = require('../utils/aiCategorizer');
+const { checkDuplicateComplaint } = require('../utils/duplicateDetector');
 
 // Category to Department mapping
 const categoryDepartmentMap = {
   'Road Damage': 'Public Works Department (PWD)',
+  'Garbage/Waste': 'Sanitation Department',
   'Garbage': 'Sanitation Department',
-  'Water Supply': 'Water Authority',
   'Drainage': 'Sewage & Drainage Board',
+  'Water Leakage': 'Water Authority',
+  'Water Supply': 'Water Authority',
+  'Streetlight': 'Electricity Board',
   'Street Light': 'Electricity Board',
   'Electricity': 'State Power Corporation',
   'Public Safety': 'Local Police Department',
@@ -50,7 +56,6 @@ const createComplaint = asyncHandler(async (req, res) => {
   if (
     !title ||
     !description ||
-    !category ||
     !state ||
     !district ||
     !taluk ||
@@ -79,6 +84,27 @@ const createComplaint = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Latitude and Longitude must be valid numbers' });
   }
 
+  // Automatic AI Complaint Categorization
+  const aiClassification = await classifyComplaint(title.trim(), description.trim());
+  const detectedCategory = aiClassification.category;
+  const detectedConfidence = aiClassification.confidence;
+
+  // Determine final category: preserve citizen's manual choice if provided and not 'Auto-detect', else use AI
+  let finalCategory = category && category !== 'Auto-detect' ? category.trim() : detectedCategory;
+  if (!finalCategory) {
+    finalCategory = detectedCategory;
+  }
+
+  // AI-based Duplicate Complaint Detection
+  const duplicateCheck = await checkDuplicateComplaint({
+    title: title.trim(),
+    description: description.trim(),
+    category: finalCategory,
+    latitude: parsedLat,
+    longitude: parsedLng,
+    district: district.trim()
+  });
+
   // Anti-spam guard: prevent duplicate submissions within 10 seconds (Requirement 13)
   const tenSecondsAgo = new Date(Date.now() - 10000);
   const potentialSpam = await Complaint.findOne({
@@ -92,7 +118,7 @@ const createComplaint = asyncHandler(async (req, res) => {
   }
 
   // Map Category to Assigned Department & AI Severity
-  const departmentName = categoryDepartmentMap[category] || 'General Panchayat Administration';
+  const departmentName = categoryDepartmentMap[finalCategory] || 'General Panchayat Administration';
 
   // Simulated AI Severity and Priority logic
   const isUrgent = urgent === 'true' || urgent === true || priority === 'Urgent';
@@ -107,10 +133,10 @@ const createComplaint = asyncHandler(async (req, res) => {
   if (isUrgent || hasEmergencyKeywords) {
     severity = 'Critical';
     priorityLevel = 'Urgent';
-  } else if (category === 'Public Safety' || category === 'Electricity') {
+  } else if (finalCategory === 'Public Safety' || finalCategory === 'Electricity') {
     severity = 'High';
     priorityLevel = 'High';
-  } else if (category === 'Water Supply' || category === 'Drainage') {
+  } else if (finalCategory === 'Water Leakage' || finalCategory === 'Water Supply' || finalCategory === 'Drainage') {
     severity = 'Medium';
     priorityLevel = 'Medium';
   }
@@ -128,13 +154,25 @@ const createComplaint = asyncHandler(async (req, res) => {
   // Generate unique complaint ID (e.g. GC-982180)
   const complaintCode = `GC-${Date.now().toString().slice(-6)}${Math.floor(100 + Math.random() * 900)}`;
 
+  // Validate selected Panchayat actually exists
+  const panchayatMatch = await Panchayat.findOne({
+    name: { $regex: new RegExp(`^${localBody.trim()}$`, 'i') },
+    district: { $regex: new RegExp(`^${district.trim()}$`, 'i') },
+    isDeleted: { $ne: true }
+  });
+
+  if (!panchayatMatch) {
+    return res.status(400).json({ message: `Selected Panchayat/local body '${localBody}' in district '${district}' does not exist.` });
+  }
+
   // Create complaint
   const complaint = await Complaint.create({
     complaintId: complaintCode,
     user: req.user._id,
+    panchayatId: panchayatMatch._id,
     title: title.trim(),
     description: description.trim(),
-    category,
+    category: finalCategory,
     state: state.trim(),
     district: district.trim(),
     taluk: taluk.trim(),
@@ -152,8 +190,12 @@ const createComplaint = asyncHandler(async (req, res) => {
     status: 'Pending',
     assignedDepartment: departmentName,
     priority: priorityLevel,
-    aiCategory: category,
-    aiSeverity: severity
+    aiCategory: detectedCategory,
+    aiConfidence: detectedConfidence,
+    aiSeverity: severity,
+    isDuplicate: duplicateCheck.isDuplicate,
+    duplicateOf: duplicateCheck.duplicateOf,
+    duplicateConfidence: duplicateCheck.confidence
   });
 
   // Create In-App Citizen Notification (Complaint Submitted)
@@ -194,7 +236,49 @@ const createComplaint = asyncHandler(async (req, res) => {
     success: true,
     message: 'Issue Reported Successfully',
     complaintId: complaintCode,
+    aiCategory: detectedCategory,
+    aiConfidence: detectedConfidence,
+    category: finalCategory,
+    isDuplicate: duplicateCheck.isDuplicate,
+    duplicateOf: duplicateCheck.duplicateOf,
+    duplicateConfidence: duplicateCheck.confidence,
+    matchedDuplicate: duplicateCheck.matchedComplaint,
     complaint
+  });
+});
+
+// @desc    Check potential duplicate complaints
+// @route   POST /api/issues/check-duplicate
+// @access  Private
+const previewDuplicateCheck = asyncHandler(async (req, res) => {
+  const { title = '', description = '', category = '', latitude, longitude, district = '' } = req.body;
+  const duplicateResult = await checkDuplicateComplaint({
+    title,
+    description,
+    category,
+    latitude,
+    longitude,
+    district
+  });
+
+  res.status(200).json({
+    success: true,
+    ...duplicateResult
+  });
+});
+
+// @desc    Real-time AI categorization preview
+// @route   POST /api/issues/classify
+// @access  Private
+const previewCategorization = asyncHandler(async (req, res) => {
+  const { title = '', description = '' } = req.body;
+  const classification = await classifyComplaint(title, description);
+
+  res.status(200).json({
+    success: true,
+    category: classification.category,
+    confidence: classification.confidence,
+    matchedKeywords: classification.matchedKeywords
   });
 });
 
@@ -202,7 +286,9 @@ const createComplaint = asyncHandler(async (req, res) => {
 // @route   GET /api/issues/my
 // @access  Private
 const getMyComplaints = asyncHandler(async (req, res) => {
-  const complaints = await Complaint.find({ user: req.user._id }).sort({ createdAt: -1 });
+  const complaints = await Complaint.find({ user: req.user._id })
+    .populate('duplicateOf', 'complaintId title category status')
+    .sort({ createdAt: -1 });
 
   res.status(200).json({
     success: true,
@@ -215,7 +301,9 @@ const getMyComplaints = asyncHandler(async (req, res) => {
 // @route   GET /api/issues/:id
 // @access  Private
 const getComplaintById = asyncHandler(async (req, res) => {
-  const complaint = await Complaint.findById(req.params.id).populate('user', 'fullName email');
+  const complaint = await Complaint.findById(req.params.id)
+    .populate('user', 'fullName email')
+    .populate('duplicateOf', 'complaintId title category status');
 
   if (!complaint) {
     return res.status(404).json({ message: 'Complaint not found' });
@@ -245,6 +333,18 @@ const updateComplaint = asyncHandler(async (req, res) => {
   // Access check
   if (complaint.user.toString() !== req.user._id.toString() && req.user.role !== 'admin' && req.user.role !== 'Admin') {
     return res.status(403).json({ message: 'Unauthorized profile access' });
+  }
+
+  // If title or description changed, optionally re-run AI categorization if category is not explicitly overridden
+  if (req.body.title || req.body.description) {
+    const updatedTitle = req.body.title || complaint.title;
+    const updatedDesc = req.body.description || complaint.description;
+    const aiResult = await classifyComplaint(updatedTitle, updatedDesc);
+    req.body.aiCategory = aiResult.category;
+    req.body.aiConfidence = aiResult.confidence;
+    if (!req.body.category || req.body.category === 'Auto-detect') {
+      req.body.category = aiResult.category;
+    }
   }
 
   complaint = await Complaint.findByIdAndUpdate(req.params.id, req.body, {
@@ -318,6 +418,8 @@ const getDashboardStats = asyncHandler(async (req, res) => {
 
 module.exports = {
   createComplaint,
+  previewDuplicateCheck,
+  previewCategorization,
   getMyComplaints,
   getComplaintById,
   updateComplaint,

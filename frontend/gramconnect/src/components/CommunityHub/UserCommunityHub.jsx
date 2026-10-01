@@ -56,7 +56,7 @@ export default function UserCommunityHub() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [caption, setCaption] = useState('');
   const [postCategory, setPostCategory] = useState('General');
-  const [postLocation, setPostLocation] = useState(user?.district || 'Ernakulam');
+  const [postLocation, setPostLocation] = useState(user?.panchayat || user?.district || '');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -64,6 +64,7 @@ export default function UserCommunityHub() {
   const [postVisibility, setPostVisibility] = useState('Public');
   const [submitting, setSubmitting] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
+  const [postErrors, setPostErrors] = useState({});
 
   // Active expanded comments tracker (postId)
   const [expandedComments, setExpandedComments] = useState({});
@@ -79,17 +80,24 @@ export default function UserCommunityHub() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const KERALA_DISTRICTS = [
+    'Thiruvananthapuram', 'Kollam', 'Pathanamthitta', 'Alappuzha', 'Kottayam',
+    'Idukki', 'Ernakulam', 'Thrissur', 'Palakkad', 'Malappuram',
+    'Kozhikode', 'Wayanad', 'Kannur', 'Kasaragod'
+  ];
+
   const validateAndSetFile = (file) => {
     if (!file) return;
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type.toLowerCase())) {
-      showToast('Only JPG, PNG, and WEBP formats are supported.', 'error');
+      setPostErrors(prev => ({ ...prev, image: 'Only JPG, PNG, and WEBP formats are supported.' }));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      showToast('Image size cannot exceed 5MB.', 'error');
+      setPostErrors(prev => ({ ...prev, image: 'Image size cannot exceed 5MB.' }));
       return;
     }
+    setPostErrors(prev => ({ ...prev, image: '' }));
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
@@ -111,10 +119,11 @@ export default function UserCommunityHub() {
     setEditingPost(post);
     setCaption(post.caption);
     setPostCategory(post.category || 'General');
-    setPostLocation(post.district || 'Ernakulam');
+    setPostLocation(post.district || user?.panchayat || user?.district || '');
     setImagePreview(getFullImageUrl(post.image));
     setImageFile(null);
     setPostVisibility(post.visibility || 'Public');
+    setPostErrors({});
     setIsCreateOpen(true);
   };
 
@@ -123,10 +132,11 @@ export default function UserCommunityHub() {
     setEditingPost(null);
     setCaption('');
     setPostCategory('General');
-    setPostLocation(user?.district || 'Ernakulam');
+    setPostLocation(user?.panchayat || user?.district || '');
     setImageFile(null);
     setImagePreview('');
     setPostVisibility('Public');
+    setPostErrors({});
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -208,14 +218,22 @@ export default function UserCommunityHub() {
   // Publish a new post
   const handlePublishPost = async (e) => {
     e.preventDefault();
-    if (!caption.trim()) {
-      showToast('Caption is required.', 'error');
+
+    // ── Per-field validation ────────────────────────────────────────────────
+    const errors = {};
+    if (!caption.trim()) errors.caption = 'Caption is required.';
+    if (!postCategory || postCategory === '') errors.category = 'Category is required.';
+    if (!postLocation || !postLocation.trim()) {
+      errors.location = 'Location is required.';
+    } else if (!KERALA_DISTRICTS.includes(postLocation.trim())) {
+      errors.location = 'Please select a valid Kerala district.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setPostErrors(errors);
       return;
     }
-    if (!imageFile && !editingPost) {
-      showToast('An image upload is required.', 'error');
-      return;
-    }
+    setPostErrors({});
 
     try {
       setSubmitting(true);
@@ -253,7 +271,7 @@ export default function UserCommunityHub() {
         fetchPosts(1, false);
       }
     } catch (err) {
-      showToast(err.message || 'Failed to submit post.', 'error');
+      showToast(err.response?.data?.message || err.message || 'Failed to submit post.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -1418,12 +1436,17 @@ export default function UserCommunityHub() {
                 <textarea
                   placeholder="What would you like to share with your village community?"
                   value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCaption(val);
+                    if (!val.trim()) setPostErrors(prev => ({ ...prev, caption: 'Caption is required.' }));
+                    else setPostErrors(prev => ({ ...prev, caption: '' }));
+                  }}
                   required
                   style={{
                     width: '100%',
                     minHeight: '120px',
-                    border: '1px solid #edf2f7',
+                    border: `1px solid ${postErrors.caption ? '#ef4444' : '#edf2f7'}`,
                     borderRadius: '12px',
                     padding: '12px',
                     fontSize: '0.9rem',
@@ -1433,57 +1456,74 @@ export default function UserCommunityHub() {
                     fontFamily: 'inherit'
                   }}
                 />
+                {postErrors.caption && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '-8px', display: 'block' }}>{postErrors.caption}</span>}
 
                 {/* Grid for Category, Location & Visibility */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   
                   {/* Category Selection */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Category</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Category <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={postCategory}
-                      onChange={(e) => setPostCategory(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPostCategory(val);
+                        if (!val) setPostErrors(prev => ({ ...prev, category: 'Category is required.' }));
+                        else setPostErrors(prev => ({ ...prev, category: '' }));
+                      }}
                       style={{
                         padding: '10px 12px',
                         borderRadius: '10px',
-                        border: '1px solid #edf2f7',
+                        border: `1px solid ${postErrors.category ? '#ef4444' : '#edf2f7'}`,
                         fontSize: '0.85rem',
                         outline: 'none',
                         background: '#ffffff',
                         cursor: 'pointer'
                       }}
                     >
+                      <option value="">Select Category</option>
                       {categories.filter(c => c !== 'All Posts' && c !== 'My Posts').map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
+                    {postErrors.category && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '-2px', display: 'block' }}>{postErrors.category}</span>}
                   </div>
 
-                  {/* Location (District/Village) */}
+                  {/* Location (District dropdown) */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Location</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Ernakulam"
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Location <span style={{ color: '#ef4444' }}>*</span></label>
+                    <select
                       value={postLocation}
-                      onChange={(e) => setPostLocation(e.target.value)}
-                      required
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPostLocation(val);
+                        if (!val) setPostErrors(prev => ({ ...prev, location: 'Location is required.' }));
+                        else setPostErrors(prev => ({ ...prev, location: '' }));
+                      }}
                       style={{
                         padding: '10px 12px',
                         borderRadius: '10px',
-                        border: '1px solid #edf2f7',
+                        border: `1px solid ${postErrors.location ? '#ef4444' : '#edf2f7'}`,
                         fontSize: '0.85rem',
                         outline: 'none',
-                        background: '#ffffff'
+                        background: '#ffffff',
+                        cursor: 'pointer'
                       }}
-                    />
+                    >
+                      <option value="">Select District</option>
+                      {KERALA_DISTRICTS.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    {postErrors.location && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '-2px', display: 'block' }}>{postErrors.location}</span>}
                   </div>
 
                 </div>
 
                 {/* Upload Image Drag and Drop and File Input */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Upload Image</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Upload Image <span style={{ fontSize: '0.68rem', fontWeight: 400, color: '#94a3b8', textTransform: 'none' }}>(Optional — JPG, PNG, WEBP · max 5MB)</span></label>
                   
                   <input
                     type="file"
@@ -1531,7 +1571,7 @@ export default function UserCommunityHub() {
                       style={{
                         width: '100%',
                         height: '140px',
-                        border: isDragging ? '2px dashed var(--primary)' : '2px dashed #cbd5e1',
+                        border: postErrors.image ? '2px dashed #ef4444' : (isDragging ? '2px dashed var(--primary)' : '2px dashed #cbd5e1'),
                         borderRadius: '12px',
                         background: isDragging ? 'var(--primary-light)' : '#f8fafc',
                         display: 'flex',
@@ -1556,6 +1596,7 @@ export default function UserCommunityHub() {
                       </div>
                     </div>
                   )}
+                  {postErrors.image && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '-2px', display: 'block' }}>{postErrors.image}</span>}
                 </div>
 
                 {/* Visibility Permission */}

@@ -6,6 +6,8 @@ const fs = require('fs');
 
 const {
   createComplaint,
+  previewDuplicateCheck,
+  previewCategorization,
   getMyComplaints,
   getComplaintById,
   updateComplaint,
@@ -49,6 +51,8 @@ const upload = multer({
 router.route('/')
   .post(protect, upload.array('images', 5), createComplaint);
 
+router.post('/check-duplicate', protect, previewDuplicateCheck);
+router.post('/classify', protect, previewCategorization);
 router.get('/my', protect, getMyComplaints);
 router.get('/stats', protect, getDashboardStats);
 

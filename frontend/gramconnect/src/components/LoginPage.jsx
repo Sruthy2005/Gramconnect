@@ -80,7 +80,14 @@ export default function LoginPage() {
     const renderGoogleBtn = () => {
       if (window.google && window.google.accounts && window.google.accounts.id) {
         clearInterval(checkInterval);
-        console.log('[DEV] Rendering Google Sign-In button...');
+        console.log('[DEV] Initializing and rendering Google Sign-In button...');
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: (response) => {
+            console.log('[DEV] Google Auth Callback triggered in LoginPage.');
+            handleGoogleSuccess(response);
+          }
+        });
         window.google.accounts.id.renderButton(
           document.getElementById('google-signin-button-login'),
           {
@@ -97,14 +104,8 @@ export default function LoginPage() {
     renderGoogleBtn();
     checkInterval = setInterval(renderGoogleBtn, 100);
 
-    window.handleGoogleLoginSuccess = (response) => {
-      console.log('[DEV] LoginPage received GSI success credential.');
-      handleGoogleSuccess(response);
-    };
-
     return () => {
       clearInterval(checkInterval);
-      window.handleGoogleLoginSuccess = null;
     };
   }, []);
 

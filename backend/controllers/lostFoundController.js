@@ -60,34 +60,66 @@ const getItemById = asyncHandler(async (req, res) => {
 const createItem = asyncHandler(async (req, res) => {
   const { type, itemName, description, category, location, date, contactInformation } = req.body;
 
+  // ── Per-field validation ────────────────────────────────────────────────
+  const phoneRegex = /^[+]?[\d\s\-().]{7,15}$/;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const VALID_TYPES = ['Lost', 'Found', 'lost', 'found'];
+  if (!type || !VALID_TYPES.includes(type)) {
+    return res.status(400).json({ success: false, message: 'Report Type must be Lost or Found.' });
+  }
+  if (!itemName || !itemName.trim()) {
+    return res.status(400).json({ success: false, message: 'Item Name is required.' });
+  }
+  if (!category || !category.trim()) {
+    return res.status(400).json({ success: false, message: 'Category is required.' });
+  }
+  if (!description || !description.trim()) {
+    return res.status(400).json({ success: false, message: 'Description is required.' });
+  }
+  if (!location || !location.trim()) {
+    return res.status(400).json({ success: false, message: 'Location is required.' });
+  }
+  if (location.trim().length < 3) {
+    return res.status(400).json({ success: false, message: 'Please provide a more specific location.' });
+  }
+  if (!date) {
+    return res.status(400).json({ success: false, message: 'Date is required.' });
+  }
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (date > todayStr) {
+    return res.status(400).json({ success: false, message: 'Date cannot be in the future.' });
+  }
+  if (!contactInformation || !contactInformation.trim()) {
+    return res.status(400).json({ success: false, message: 'Contact Information is required.' });
+  }
+  const contact = contactInformation.trim();
+  if (!phoneRegex.test(contact) && !emailRegex.test(contact)) {
+    return res.status(400).json({ success: false, message: 'Contact Information must be a valid phone number or email address.' });
+  }
+
   let imageUrl = '';
   if (req.file) {
     imageUrl = `/uploads/lost-found/${req.file.filename}`;
   }
 
-  if (!type || !itemName || !description || !category || !location || !date || !contactInformation) {
-    return res.status(400).json({ success: false, message: 'Please provide all required fields' });
-  }
-
   // Normalize type casing (lost/found -> Lost/Found) to match model schema
   let normalizedType = type;
-  if (type) {
-    const typeLower = type.toLowerCase();
-    if (typeLower === 'lost') normalizedType = 'Lost';
-    if (typeLower === 'found') normalizedType = 'Found';
-  }
+  const typeLower = type.toLowerCase();
+  if (typeLower === 'lost') normalizedType = 'Lost';
+  if (typeLower === 'found') normalizedType = 'Found';
 
   const initialStatus = normalizedType === 'Found' ? 'FOUND' : 'LOST';
 
   const item = await LostFoundItem.create({
     user: req.user._id,
     type: normalizedType,
-    itemName,
-    description,
-    category,
-    location,
+    itemName: itemName.trim(),
+    description: description.trim(),
+    category: category.trim(),
+    location: location.trim(),
     date,
-    contactInformation,
+    contactInformation: contact,
     image: imageUrl,
     status: initialStatus
   });

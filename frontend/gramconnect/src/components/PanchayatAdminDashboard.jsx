@@ -647,7 +647,14 @@ export default function PanchayatAdminDashboard() {
                               <tr key={i}>
                                 <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{c.complaintId || c._id?.substring(0, 8)}</td>
                                 <td style={{ fontWeight: 700 }}>{c.user?.fullName || 'Citizen'}</td>
-                                <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{c.category}</td>
+                                <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span>{c.category}</span>
+                                    <span style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 700 }}>
+                                      🤖 {c.aiCategory || c.category}
+                                    </span>
+                                  </div>
+                                </td>
                                 <td>
                                   <span className="status-pill" style={{ ...getStatusBadgeStyle(c.status), fontWeight: 700, padding: '4px 8px', borderRadius: '9999px', fontSize: '0.72rem' }}>
                                     {c.status}
@@ -749,7 +756,14 @@ export default function PanchayatAdminDashboard() {
                         <tr key={c._id}>
                           <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>{c.complaintId}</td>
                           <td style={{ fontWeight: 600, color: '#1e293b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</td>
-                          <td>{c.category}</td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontWeight: 600 }}>{c.category}</span>
+                              <span style={{ fontSize: '0.7rem', color: '#2563eb', fontWeight: 700 }}>
+                                🤖 {c.aiCategory || c.category}
+                              </span>
+                            </div>
+                          </td>
                           <td>{c.anonymous ? 'Anonymous' : c.user?.fullName || '—'}</td>
                           <td>
                             <span className="status-pill" style={{ ...getStatusBadgeStyle(c.status), fontWeight: 700, padding: '4px 8px', borderRadius: '9999px', fontSize: '0.72rem' }}>
@@ -822,6 +836,7 @@ export default function PanchayatAdminDashboard() {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Phone</th>
+                        <th>Panchayat</th>
                         <th>Ward</th>
                         <th>Status</th>
                         <th>Joined</th>
@@ -833,6 +848,7 @@ export default function PanchayatAdminDashboard() {
                           <td style={{ fontWeight: 600, color: '#1e293b' }}>{c.fullName}</td>
                           <td style={{ color: '#475569' }}>{c.email}</td>
                           <td style={{ color: '#475569' }}>{c.mobile}</td>
+                          <td style={{ color: '#475569' }}>{c.panchayat || '—'}</td>
                           <td style={{ color: '#475569' }}>{c.ward || '—'}</td>
                           <td>
                             <span className={`badge-status ${c.status === 'Blocked' ? 'blocked' : 'active'}`}>
@@ -1203,6 +1219,7 @@ export default function PanchayatAdminDashboard() {
               <div className="user-details-grid">
                 {[
                   { label: 'Category', value: selectedComplaint.category },
+                  { label: 'AI Detected Category', value: selectedComplaint.aiCategory ? `🤖 ${selectedComplaint.aiCategory}` : selectedComplaint.category },
                   { label: 'Priority', value: selectedComplaint.priority || 'Normal' },
                   { label: 'District', value: selectedComplaint.district },
                   { label: 'Submitted By', value: selectedComplaint.anonymous ? 'Anonymous' : selectedComplaint.user?.fullName || '—' },

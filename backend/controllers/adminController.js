@@ -1,5 +1,6 @@
 const Complaint = require('../models/Complaint');
 const User = require('../models/User');
+const Panchayat = require('../models/Panchayat');
 const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const { createNotification } = require('../utils/notificationHelper');
@@ -260,20 +261,18 @@ const getAdminStats = asyncHandler(async (req, res) => {
     }
   });
 
-  const categories = [
+  const canonicalCategories = [
     'Road Damage',
-    'Garbage',
-    'Water Supply',
+    'Garbage/Waste',
     'Drainage',
-    'Street Light',
-    'Electricity',
-    'Public Safety',
-    'Traffic',
-    'Environment',
+    'Water Leakage',
+    'Streetlight',
     'Other'
   ];
 
-  const categoryStats = categories.map(cat => ({
+  const allCategoryKeys = Array.from(new Set([...canonicalCategories, ...Object.keys(countMap)]));
+
+  const categoryStats = allCategoryKeys.map(cat => ({
     category: cat,
     count: countMap[cat] || 0
   }));
@@ -559,12 +558,24 @@ const getAllComplaints = asyncHandler(async (req, res) => {
   const isPanchayatAdmin = req.user.role &&
     ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
   if (isPanchayatAdmin) {
-    // Only show complaints from users in this admin's panchayat
-    if (req.user.district) filter.district = req.user.district;
-    if (req.user.panchayat) {
-      const panchayatUsers = await User.find({ panchayat: req.user.panchayat, isDeleted: { $ne: true } }).select('_id');
-      filter.user = { $in: panchayatUsers.map(u => u._id) };
+    console.log('--- PANCHAYAT ADMIN COMPLAINT FILTER DEBUG ---');
+    console.log('Logged-in admin user ID:', req.user._id);
+    console.log('Admin role:', req.user.role);
+    console.log('Admin panchayatId:', req.user.panchayatId);
+
+    if (!req.user.panchayatId) {
+      console.log('No assigned Panchayat found for admin. Returning empty results.');
+      console.log('Number of complaints returned: 0');
+      console.log('----------------------------------------------');
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        complaints: []
+      });
     }
+
+    filter.panchayatId = req.user.panchayatId;
+    console.log('Complaint API filter:', filter);
   }
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -608,7 +619,13 @@ const getAllComplaints = asyncHandler(async (req, res) => {
 
   const complaints = await Complaint.find(filter)
     .sort({ createdAt: -1 })
-    .populate('user', 'fullName email mobile profilePicture address');
+    .populate('user', 'fullName email mobile profilePicture address')
+    .populate('duplicateOf', 'complaintId title category status');
+
+  if (isPanchayatAdmin) {
+    console.log('Number of complaints returned:', complaints.length);
+    console.log('----------------------------------------------');
+  }
 
   res.status(200).json({
     success: true,
@@ -624,7 +641,8 @@ const getAllComplaints = asyncHandler(async (req, res) => {
 // @access  Private (Admin)
 const getComplaintDetails = asyncHandler(async (req, res) => {
   const complaint = await Complaint.findById(req.params.id)
-    .populate('user', 'fullName email mobile profilePicture address district localBody localBodyType ward houseName street landmark pinCode');
+    .populate('user', 'fullName email mobile profilePicture address district localBody localBodyType ward houseName street landmark pinCode')
+    .populate('duplicateOf', 'complaintId title category status');
 
   if (!complaint) {
     return res.status(404).json({ message: 'Complaint not found' });
@@ -858,6 +876,7 @@ const exportComplaintsAdmin = asyncHandler(async (req, res) => {
     'Complaint ID',
     'Title',
     'Category',
+    'AI Category',
     'Priority',
     'Status',
     'Department',
@@ -890,6 +909,7 @@ const exportComplaintsAdmin = asyncHandler(async (req, res) => {
       escapeCsv(c.complaintId),
       escapeCsv(c.title),
       escapeCsv(c.category),
+      escapeCsv(c.aiCategory || c.category),
       escapeCsv(c.priority || 'Normal'),
       escapeCsv(c.status),
       escapeCsv(c.assignedDepartment || 'Not Routed'),
@@ -928,10 +948,17 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const isPanchayatAdminUser = req.user.role &&
     ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
   if (isPanchayatAdminUser) {
+    if (!req.user.panchayatId) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        total: 0,
+        users: []
+      });
+    }
     // Only show citizens in this panchayat's area
     query.role = { $in: ['citizen', 'Citizen'] };
-    if (req.user.panchayat) query.panchayat = req.user.panchayat;
-    else if (req.user.district) query.district = req.user.district;
+    query.panchayatId = req.user.panchayatId;
   }
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -994,6 +1021,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
         mobile: u.mobile,
         district: u.district || '',
         panchayat: u.panchayat || '',
+        panchayatId: u.panchayatId || null,
         localBody: u.localBody || '',
         localBodyType: u.localBodyType || '',
         ward: u.ward || '',
@@ -1412,25 +1440,94 @@ const getPanchayatAdmins = asyncHandler(async (req, res) => {
   });
 });
 
+const generatePanchayatCodeHelper = async (districtName, panchayatName) => {
+  const distAbbr = (districtName || 'GEN').replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'GEN';
+  const cleanPanch = (panchayatName || 'PAN')
+    .replace(/\s*(Panchayat|Corporation|Municipality|Grama|Nagar|Town)\s*/gi, '')
+    .trim();
+  const panchAbbr = (cleanPanch || panchayatName || 'PAN').replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'PAN';
+
+  const prefix = `${distAbbr}-${panchAbbr}`;
+
+  const existingWithPrefix = await Panchayat.countDocuments({
+    panchayatCode: { $regex: `^${prefix}-`, $options: 'i' }
+  });
+
+  const seqNum = existingWithPrefix + 1;
+  return `${prefix}-${String(seqNum).padStart(3, '0')}`;
+};
+
 // @desc    Create a new panchayat admin
 // @route   POST /api/admin/panchayat-admins
 // @access  Private (Super Admin / Main Admin)
 const createPanchayatAdmin = asyncHandler(async (req, res) => {
   const { fullName, email, mobile, password, confirmPassword, district, localBodyType, panchayat, panchayatCode, status } = req.body;
 
-  if (!fullName || !email || !mobile || !password || !district || !panchayat) {
-    return res.status(400).json({ message: 'Please provide Full Name, Email, Phone, Password, District, and Panchayat' });
+  // ── Validation ──────────────────────────────────────────────────────────
+  const nameRegex = /^[A-Za-z\s]+$/;
+  const phoneRegex = /^\d{10}$/;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!fullName || !fullName.trim()) {
+    return res.status(400).json({ success: false, message: 'Full Name is required.' });
   }
-  if (password !== confirmPassword) {
-    return res.status(400).json({ message: 'Passwords do not match' });
+  if (!nameRegex.test(fullName.trim())) {
+    return res.status(400).json({ success: false, message: 'Full Name must contain letters and spaces only.' });
+  }
+  if (!email || !email.trim()) {
+    return res.status(400).json({ success: false, message: 'Email is required.' });
+  }
+  if (!emailRegex.test(email.trim())) {
+    return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+  }
+  if (!mobile || !mobile.trim()) {
+    return res.status(400).json({ success: false, message: 'Phone Number is required.' });
+  }
+  if (!phoneRegex.test(mobile.trim())) {
+    return res.status(400).json({ success: false, message: 'Phone Number must be exactly 10 digits.' });
+  }
+  if (!district) {
+    return res.status(400).json({ success: false, message: 'District is required.' });
+  }
+  if (!localBodyType) {
+    return res.status(400).json({ success: false, message: 'Local Body Type is required.' });
+  }
+  if (!panchayat) {
+    return res.status(400).json({ success: false, message: localBodyType === 'Municipality' ? 'Municipality is required.' : 'Panchayath is required.' });
+  }
+  if (!password) {
+    return res.status(400).json({ success: false, message: 'Password is required.' });
   }
   if (password.length < 8) {
-    return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+  }
+  if (!confirmPassword) {
+    return res.status(400).json({ success: false, message: 'Please confirm your password.' });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ success: false, message: 'Passwords do not match.' });
   }
 
   const emailExists = await User.findOne({ email: email.toLowerCase(), isDeleted: { $ne: true } });
   if (emailExists) {
     return res.status(400).json({ message: 'An account with this email already exists' });
+  }
+
+  // Lookup or create Panchayat matching by name (panchayat) and district
+  let panchayatMatch = await Panchayat.findOne({
+    name: { $regex: new RegExp(`^${panchayat.trim()}$`, 'i') },
+    district: { $regex: new RegExp(`^${district.trim()}$`, 'i') },
+    isDeleted: { $ne: true }
+  });
+
+  if (!panchayatMatch) {
+    const generatedCode = await generatePanchayatCodeHelper(district, panchayat);
+    panchayatMatch = await Panchayat.create({
+      name: panchayat.trim(),
+      district: district.trim(),
+      status: 'Active',
+      panchayatCode: generatedCode
+    });
   }
 
   const admin = await User.create({
@@ -1441,11 +1538,15 @@ const createPanchayatAdmin = asyncHandler(async (req, res) => {
     role: 'panchayat_admin',
     district,
     panchayat,
+    panchayatId: panchayatMatch._id,
     localBodyType: localBodyType || 'Grama Panchayath',
     panchayatCode: panchayatCode || '',
     status: status || 'Active',
     isVerified: true
   });
+
+  panchayatMatch.adminId = admin._id;
+  await panchayatMatch.save();
 
   res.status(201).json({
     success: true,
@@ -1457,6 +1558,7 @@ const createPanchayatAdmin = asyncHandler(async (req, res) => {
       role: admin.role,
       district: admin.district,
       panchayat: admin.panchayat,
+      panchayatId: admin.panchayatId,
       localBodyType: admin.localBodyType,
       panchayatCode: admin.panchayatCode,
       status: admin.status,
@@ -1471,6 +1573,29 @@ const createPanchayatAdmin = asyncHandler(async (req, res) => {
 const updatePanchayatAdmin = asyncHandler(async (req, res) => {
   const { fullName, mobile, district, localBodyType, panchayat, panchayatCode, status } = req.body;
 
+  // ── Validation ──────────────────────────────────────────────────────────
+  const nameRegex = /^[A-Za-z\s]+$/;
+  const phoneRegex = /^\d{10}$/;
+
+  if (fullName !== undefined) {
+    if (!fullName.trim()) {
+      return res.status(400).json({ success: false, message: 'Full Name is required.' });
+    }
+    if (!nameRegex.test(fullName.trim())) {
+      return res.status(400).json({ success: false, message: 'Full Name must contain letters and spaces only.' });
+    }
+  }
+  if (mobile !== undefined) {
+    if (!mobile.trim()) {
+      return res.status(400).json({ success: false, message: 'Phone Number is required.' });
+    }
+    if (!phoneRegex.test(mobile.trim())) {
+      return res.status(400).json({ success: false, message: 'Phone Number must be exactly 10 digits.' });
+    }
+  }
+  if (status !== undefined && !['Active', 'Inactive'].includes(status)) {
+    return res.status(400).json({ success: false, message: 'Status must be Active or Inactive.' });
+  }
   const admin = await User.findOne({
     _id: req.params.id,
     role: { $in: ['panchayat_admin', 'PANCHAYAT_ADMIN'] },
@@ -1488,6 +1613,31 @@ const updatePanchayatAdmin = asyncHandler(async (req, res) => {
   if (panchayat) admin.panchayat = panchayat;
   if (panchayatCode !== undefined) admin.panchayatCode = panchayatCode;
   if (status) admin.status = status;
+
+  // Sync panchayatId if panchayat or district changed
+  if (panchayat || district) {
+    const searchPanchayat = admin.panchayat;
+    const searchDistrict = admin.district;
+    let panchayatMatch = await Panchayat.findOne({
+      name: { $regex: new RegExp(`^${searchPanchayat.trim()}$`, 'i') },
+      district: { $regex: new RegExp(`^${searchDistrict.trim()}$`, 'i') },
+      isDeleted: { $ne: true }
+    });
+    if (!panchayatMatch) {
+      const generatedCode = await generatePanchayatCodeHelper(searchDistrict, searchPanchayat);
+      panchayatMatch = await Panchayat.create({
+        name: searchPanchayat.trim(),
+        district: searchDistrict.trim(),
+        status: 'Active',
+        adminId: admin._id,
+        panchayatCode: generatedCode
+      });
+    } else {
+      panchayatMatch.adminId = admin._id;
+      await panchayatMatch.save();
+    }
+    admin.panchayatId = panchayatMatch._id;
+  }
 
   await admin.save();
 
@@ -1567,15 +1717,36 @@ const deletePanchayatAdmin = asyncHandler(async (req, res) => {
 // @access  Private (panchayat_admin)
 const getPanchayatAdminDashboardStats = asyncHandler(async (req, res) => {
   const { panchayat, district } = req.user;
+  const isPanchayatAdmin = req.user.role &&
+    ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+
+  if (isPanchayatAdmin && !req.user.panchayatId) {
+    return res.status(200).json({
+      success: true,
+      panchayat: req.user.panchayat || '',
+      district: req.user.district || '',
+      stats: {
+        totalCitizens: 0,
+        totalComplaints: 0,
+        pendingComplaints: 0,
+        inProgressComplaints: 0,
+        resolvedComplaints: 0
+      },
+      recentComplaints: []
+    });
+  }
 
   // Get citizens in this panchayat
-  const citizenQuery = { role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true } };
-  if (panchayat) citizenQuery.panchayat = panchayat;
-  else if (district) citizenQuery.district = district;
+  const citizenQuery = {
+    role: { $in: ['citizen', 'Citizen'] },
+    isDeleted: { $ne: true },
+    $or: [
+      { panchayatId: req.user.panchayatId },
+      { panchayat: req.user.panchayat }
+    ]
+  };
 
-  const citizenIds = (await User.find(citizenQuery).select('_id')).map(u => u._id);
-
-  const complaintFilter = { user: { $in: citizenIds } };
+  const complaintFilter = { panchayatId: req.user.panchayatId };
 
   const [
     totalCitizens,

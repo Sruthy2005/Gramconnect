@@ -19,7 +19,10 @@ require('./utils/transporter');
 const PORT = process.env.PORT || 5000;
 
 // Connect to Database
-connectDB();
+connectDB().then(async () => {
+  const backfillPanchayats = require('./utils/migration');
+  await backfillPanchayats();
+});
 
 // Start Server
 app.listen(PORT, () => {

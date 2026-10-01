@@ -321,6 +321,7 @@ export default function AdminDashboard() {
   const [paFormStatus, setPaFormStatus] = useState('Active');
   const [paAvailablePanchayats, setPaAvailablePanchayats] = useState([]);
   const [fetchingPaCode, setFetchingPaCode] = useState(false);
+  const [paFormErrors, setPaFormErrors] = useState({});
 
 
   // Filter States (Complaint Management)
@@ -450,6 +451,7 @@ export default function AdminDashboard() {
           id: c.complaintId,
           citizen: c.anonymous ? 'Anonymous Citizen' : (c.user?.fullName || 'Citizen'),
           category: c.category,
+          aiCategory: c.aiCategory || c.category,
           status: c.status,
           priority: c.priority || 'Normal',
           date: new Date(c.createdAt).toISOString().split('T')[0]
@@ -979,20 +981,76 @@ export default function AdminDashboard() {
       setPaAvailablePanchayats([]);
       setFetchingPaCode(false);
     }
+    setPaFormErrors({});
     setPaModalOpen(true);
   };
 
 
   const handleSavePanchayatAdmin = async (e) => {
     e.preventDefault();
-    if (!paFormName || !paFormEmail || !paFormPhone || !paFormDistrict || !paFormPanchayat) {
-      showToast('Please fill all required fields.', 'error');
+
+    // ── Per-field validation ────────────────────────────────────────────────
+    const errors = {};
+    const nameRegex = /^[A-Za-z\s]+$/;
+    const phoneRegex = /^\d{10}$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!paFormName.trim()) {
+      errors.name = 'Full Name is required.';
+    } else if (!nameRegex.test(paFormName.trim())) {
+      errors.name = 'Full Name must contain letters and spaces only.';
+    }
+
+    if (!paEditingItem) {
+      if (!paFormEmail.trim()) {
+        errors.email = 'Email is required.';
+      } else if (!emailRegex.test(paFormEmail.trim())) {
+        errors.email = 'Enter a valid email address.';
+      }
+    }
+
+    if (!paFormPhone.trim()) {
+      errors.phone = 'Phone Number is required.';
+    } else if (!phoneRegex.test(paFormPhone.trim())) {
+      errors.phone = 'Phone Number must be exactly 10 digits.';
+    }
+
+    if (!paFormDistrict) {
+      errors.district = 'District is required.';
+    }
+
+    if (!paFormLocalBodyType) {
+      errors.localBodyType = 'Local Body Type is required.';
+    }
+
+    if (paFormLocalBodyType === 'Panchayath' && !paFormPanchayat) {
+      errors.panchayat = 'Panchayath is required.';
+    }
+
+    if (paFormLocalBodyType === 'Municipality' && !paFormPanchayat) {
+      errors.panchayat = 'Municipality is required.';
+    }
+
+    if (!paEditingItem) {
+      if (!paFormPassword) {
+        errors.password = 'Password is required.';
+      } else if (paFormPassword.length < 8) {
+        errors.password = 'Password must be at least 8 characters.';
+      }
+
+      if (!paFormConfirmPassword) {
+        errors.confirmPassword = 'Please confirm your password.';
+      } else if (paFormPassword !== paFormConfirmPassword) {
+        errors.confirmPassword = 'Passwords do not match.';
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setPaFormErrors(errors);
       return;
     }
-    if (!paEditingItem && !paFormPassword) {
-      showToast('Password is required.', 'error');
-      return;
-    }
+
+    setPaFormErrors({});
     setSubmittingPA(true);
     try {
       let res;
@@ -4085,7 +4143,14 @@ export default function AdminDashboard() {
                               <tr key={i}>
                                 <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{c.id}</td>
                                 <td style={{ fontWeight: 700 }}>{c.citizen}</td>
-                                <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{c.category}</td>
+                                <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span>{c.category}</span>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb' }}>
+                                      🤖 {c.aiCategory || c.category}
+                                    </span>
+                                  </div>
+                                </td>
                                 <td>
                                   <span className="status-pill" style={{ ...getStatusBadgeStyle(c.status), fontWeight: 700, padding: '4px 8px', borderRadius: '9999px', fontSize: '0.72rem' }}>
                                     {c.status}
@@ -4326,10 +4391,13 @@ export default function AdminDashboard() {
                   >
                     <option value="">All Categories</option>
                     <option value="Road Damage">Road Damage</option>
-                    <option value="Garbage">Garbage</option>
-                    <option value="Water Supply">Water Supply</option>
+                    <option value="Garbage/Waste">Garbage/Waste</option>
                     <option value="Drainage">Drainage</option>
-                    <option value="Street Light">Street Light</option>
+                    <option value="Water Leakage">Water Leakage</option>
+                    <option value="Streetlight">Streetlight</option>
+                    <option value="Garbage">Garbage (Legacy)</option>
+                    <option value="Water Supply">Water Supply (Legacy)</option>
+                    <option value="Street Light">Street Light (Legacy)</option>
                     <option value="Electricity">Electricity</option>
                     <option value="Public Safety">Public Safety</option>
                     <option value="Traffic">Traffic</option>
@@ -4451,7 +4519,14 @@ export default function AdminDashboard() {
                               <span style={{ fontWeight: 700 }}>{c.user?.fullName}</span>
                             )}
                           </td>
-                          <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{c.category}</td>
+                          <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span>{c.category}</span>
+                              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '1px 6px', borderRadius: '4px', border: '1px solid #bfdbfe', width: 'fit-content' }}>
+                                🤖 {c.aiCategory || c.category}
+                              </span>
+                            </div>
+                          </td>
                           <td style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>{c.assignedDepartment || 'Not Routed'}</td>
                           <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{c.city}, {c.ward || 'General'}</td>
                           <td>
@@ -4619,6 +4694,7 @@ export default function AdminDashboard() {
                       <p><strong>Complaint Title:</strong> {detailsComplaint.title}</p>
                       <p><strong>Description:</strong> {detailsComplaint.description}</p>
                       <p><strong>Category:</strong> {detailsComplaint.category}</p>
+                      <p><strong>AI Detected Category:</strong> <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem' }}>🤖 {detailsComplaint.aiCategory || detailsComplaint.category}</span></p>
                       <p><strong>Department:</strong> {detailsComplaint.assignedDepartment || 'Not Routed'}</p>
                       <p><strong>Complaint Type:</strong> Public Citizen Report</p>
                       <p><strong>Submitted Date:</strong> {new Date(detailsComplaint.createdAt).toLocaleString()}</p>
@@ -4982,8 +5058,8 @@ export default function AdminDashboard() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Recommended Department</span>
-                      <span className="insight-pill info" style={{ alignSelf: 'flex-start' }}>{detailsComplaint.category} Division</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>AI Classified Category</span>
+                      <span className="insight-pill info" style={{ alignSelf: 'flex-start', fontWeight: 800 }}>🤖 {detailsComplaint.aiCategory || detailsComplaint.category}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Estimated Resolution Time</span>
@@ -5879,16 +5955,59 @@ export default function AdminDashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div>
                       <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Full Name <span style={{ color: '#ef4444' }}>*</span></label>
-                      <input type="text" value={paFormName} onChange={e => setPaFormName(e.target.value)} required placeholder="Enter full name" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                      <input
+                        type="text"
+                        value={paFormName}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setPaFormName(val);
+                          const nameRegex = /^[A-Za-z\s]*$/;
+                          if (!val.trim()) setPaFormErrors(prev => ({ ...prev, name: 'Full Name is required.' }));
+                          else if (!nameRegex.test(val)) setPaFormErrors(prev => ({ ...prev, name: 'Full Name must contain letters and spaces only.' }));
+                          else setPaFormErrors(prev => ({ ...prev, name: '' }));
+                        }}
+                        placeholder="Enter full name"
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.name ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      {paFormErrors.name && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.name}</span>}
                     </div>
                     <div>
                       <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Phone Number <span style={{ color: '#ef4444' }}>*</span></label>
-                      <input type="tel" value={paFormPhone} onChange={e => setPaFormPhone(e.target.value)} required placeholder="10-digit mobile" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                      <input
+                        type="tel"
+                        value={paFormPhone}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setPaFormPhone(val);
+                          const phoneRegex = /^\d{10}$/;
+                          if (!val.trim()) setPaFormErrors(prev => ({ ...prev, phone: 'Phone Number is required.' }));
+                          else if (!phoneRegex.test(val.trim())) setPaFormErrors(prev => ({ ...prev, phone: 'Phone Number must be exactly 10 digits.' }));
+                          else setPaFormErrors(prev => ({ ...prev, phone: '' }));
+                        }}
+                        placeholder="10-digit mobile"
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.phone ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      {paFormErrors.phone && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.phone}</span>}
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Email Address <span style={{ color: '#ef4444' }}>*</span></label>
-                      <input type="email" value={paFormEmail} onChange={e => setPaFormEmail(e.target.value)} required={!paEditingItem} disabled={!!paEditingItem} placeholder="admin@example.com" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border-color)', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', background: paEditingItem ? 'var(--card-inner)' : 'var(--input-bg)', color: paEditingItem ? 'var(--text-muted)' : 'var(--text-primary)' }} />
+                      <input
+                        type="email"
+                        value={paFormEmail}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setPaFormEmail(val);
+                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                          if (!val.trim()) setPaFormErrors(prev => ({ ...prev, email: 'Email is required.' }));
+                          else if (!emailRegex.test(val.trim())) setPaFormErrors(prev => ({ ...prev, email: 'Enter a valid email address.' }));
+                          else setPaFormErrors(prev => ({ ...prev, email: '' }));
+                        }}
+                        disabled={!!paEditingItem}
+                        placeholder="admin@example.com"
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.email ? '#ef4444' : 'var(--border-color)'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', background: paEditingItem ? 'var(--card-inner)' : 'var(--input-bg)', color: paEditingItem ? 'var(--text-muted)' : 'var(--text-primary)' }}
+                      />
                       {paEditingItem && <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px', display: 'block' }}>Email cannot be changed after creation.</span>}
+                      {paFormErrors.email && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.email}</span>}
                     </div>
                   </div>
                 </div>
@@ -5899,38 +6018,63 @@ export default function AdminDashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <div>
                       <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>District <span style={{ color: '#ef4444' }}>*</span></label>
-                      <select value={paFormDistrict} onChange={e => { const dist = e.target.value; setPaFormDistrict(dist); setPaFormPanchayat(''); setPaFormPanchayatCode(''); setPaAvailablePanchayats(getPanchayatsForDistrict(dist)); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                      <select
+                        value={paFormDistrict}
+                        onChange={e => { const dist = e.target.value; setPaFormDistrict(dist); setPaFormPanchayat(''); setPaFormPanchayatCode(''); setPaAvailablePanchayats(getPanchayatsForDistrict(dist)); if (paFormErrors.district) setPaFormErrors(prev => ({ ...prev, district: '' })); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.district ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}
+                      >
                         <option value="">Select District</option>
                         {KERALA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
+                      {paFormErrors.district && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.district}</span>}
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Local Body Type</label>
-                      <select value={paFormLocalBodyType} onChange={e => { setPaFormLocalBodyType(e.target.value); setPaFormPanchayat(''); setPaFormPanchayatCode(''); }} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Local Body Type <span style={{ color: '#ef4444' }}>*</span></label>
+                      <select
+                        value={paFormLocalBodyType}
+                        onChange={e => { setPaFormLocalBodyType(e.target.value); setPaFormPanchayat(''); setPaFormPanchayatCode(''); if (paFormErrors.localBodyType) setPaFormErrors(prev => ({ ...prev, localBodyType: '', panchayat: '' })); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.localBodyType ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}
+                      >
+                        <option value="">Select Type</option>
                         <option value="Panchayath">Panchayath</option>
                         <option value="Municipality">Municipality</option>
                       </select>
+                      {paFormErrors.localBodyType && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.localBodyType}</span>}
                     </div>
-                    {paFormLocalBodyType === 'Panchayath' ? (
+                    {paFormLocalBodyType === 'Panchayath' && (
                       <div style={{ gridColumn: 'span 2' }}>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Panchayath <span style={{ color: '#ef4444' }}>*</span></label>
-                        <select value={paFormPanchayat} onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                        <select
+                          value={paFormPanchayat}
+                          onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); if (paFormErrors.panchayat) setPaFormErrors(prev => ({ ...prev, panchayat: '' })); }}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.panchayat ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}
+                        >
                           <option value="">{paFormDistrict ? 'Select Panchayath' : 'Select District first'}</option>
                           {getLocationsByDistrictAndType(paFormDistrict, 'PANCHAYATH').map(loc => (
                             <option key={loc.name} value={loc.name}>{loc.name}</option>
                           ))}
                         </select>
+                        {paFormErrors.panchayat && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.panchayat}</span>}
                       </div>
-                    ) : (
+                    )}
+                    {paFormLocalBodyType === 'Municipality' && (
                       <div style={{ gridColumn: 'span 2' }}>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Municipality <span style={{ color: '#ef4444' }}>*</span></label>
-                        <select value={paFormPanchayat} onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); }} required style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}>
+                        <select
+                          value={paFormPanchayat}
+                          onChange={e => { const val = e.target.value; setPaFormPanchayat(val); fetchPanchayatCode(paFormDistrict, val, paFormLocalBodyType); if (paFormErrors.panchayat) setPaFormErrors(prev => ({ ...prev, panchayat: '' })); }}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.panchayat ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', appearance: 'none' }}
+                        >
                           <option value="">{paFormDistrict ? 'Select Municipality' : 'Select District first'}</option>
                           {getLocationsByDistrictAndType(paFormDistrict, 'MUNICIPALITY').map(loc => (
                             <option key={loc.name} value={loc.name}>{loc.name}</option>
                           ))}
                         </select>
+                        {paFormErrors.panchayat && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.panchayat}</span>}
                       </div>
+                    )}
+                    {!paFormLocalBodyType && (
+                      <div style={{ gridColumn: 'span 2', color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>Select a Local Body Type to continue.</div>
                     )}
                   </div>
                 </div>
@@ -5942,11 +6086,44 @@ export default function AdminDashboard() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                       <div>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Password <span style={{ color: '#ef4444' }}>*</span></label>
-                        <input type="password" value={paFormPassword} onChange={e => setPaFormPassword(e.target.value)} required placeholder="Min. 8 characters" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                        <input
+                          type="password"
+                          value={paFormPassword}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setPaFormPassword(val);
+                            if (!val) setPaFormErrors(prev => ({ ...prev, password: 'Password is required.' }));
+                            else if (val.length < 8) setPaFormErrors(prev => ({ ...prev, password: 'Password must be at least 8 characters.' }));
+                            else setPaFormErrors(prev => ({ ...prev, password: '' }));
+                            // Re-validate confirm password against the new password value
+                            if (paFormConfirmPassword) {
+                              setPaFormErrors(prev => ({
+                                ...prev,
+                                confirmPassword: val !== paFormConfirmPassword ? 'Passwords do not match.' : ''
+                              }));
+                            }
+                          }}
+                          placeholder="Min. 8 characters"
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.password ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                        {paFormErrors.password && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.password}</span>}
                       </div>
                       <div>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Confirm Password <span style={{ color: '#ef4444' }}>*</span></label>
-                        <input type="password" value={paFormConfirmPassword} onChange={e => setPaFormConfirmPassword(e.target.value)} required placeholder="Re-enter password" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                        <input
+                          type="password"
+                          value={paFormConfirmPassword}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setPaFormConfirmPassword(val);
+                            if (!val) setPaFormErrors(prev => ({ ...prev, confirmPassword: 'Please confirm your password.' }));
+                            else if (val !== paFormPassword) setPaFormErrors(prev => ({ ...prev, confirmPassword: 'Passwords do not match.' }));
+                            else setPaFormErrors(prev => ({ ...prev, confirmPassword: '' }));
+                          }}
+                          placeholder="Re-enter password"
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${paFormErrors.confirmPassword ? '#ef4444' : '#e2e8f0'}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                        {paFormErrors.confirmPassword && <span style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '4px', display: 'block' }}>{paFormErrors.confirmPassword}</span>}
                       </div>
                     </div>
                   </div>

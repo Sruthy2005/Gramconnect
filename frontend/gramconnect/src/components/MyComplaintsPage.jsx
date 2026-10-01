@@ -10,9 +10,12 @@ import './MyComplaintsPage.css';
 
 const categoryDepartmentMap = {
   'Road Damage': 'Public Works Department (PWD)',
+  'Garbage/Waste': 'Sanitation Department',
   'Garbage': 'Sanitation Department',
-  'Water Supply': 'Water Authority',
   'Drainage': 'Sewage & Drainage Board',
+  'Water Leakage': 'Water Authority',
+  'Water Supply': 'Water Authority',
+  'Streetlight': 'Electricity Board',
   'Street Light': 'Electricity Board',
   'Electricity': 'State Power Corporation',
   'Public Safety': 'Local Police Department',
@@ -23,14 +26,10 @@ const categoryDepartmentMap = {
 
 const categories = [
   'Road Damage',
-  'Garbage',
-  'Water Supply',
+  'Garbage/Waste',
   'Drainage',
-  'Street Light',
-  'Electricity',
-  'Public Safety',
-  'Traffic',
-  'Environment',
+  'Water Leakage',
+  'Streetlight',
   'Other'
 ];
 
@@ -261,6 +260,10 @@ export default function MyComplaintsPage() {
             <div class="meta-item">
               <div class="label">Category</div>
               <div class="value">${complaint.category}</div>
+            </div>
+            <div class="meta-item">
+              <div class="label">AI Classification</div>
+              <div class="value" style="color: #2563eb; font-weight: bold;">${complaint.aiCategory || complaint.category}</div>
             </div>
             <div class="meta-item">
               <div class="label">Assigned Department</div>
@@ -568,7 +571,12 @@ export default function MyComplaintsPage() {
                         <span className="truncate-text">{c.title || 'Civic Issue'}</span>
                       </td>
                       <td className="col-category">
-                        <span className="category-text">{c.category}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span className="category-text">{c.category}</span>
+                          <span className="ai-category-pill" title={`AI Classified: ${c.aiCategory || c.category}`}>
+                            🤖 {c.aiCategory || c.category}
+                          </span>
+                        </div>
                         {c.urgent && <span className="urgent-badge-inline">Urgent</span>}
                       </td>
                       <td className="col-location" title={c.city}>
@@ -656,6 +664,9 @@ export default function MyComplaintsPage() {
                   <div className="card-info-item">
                     <span className="info-lbl">Category</span>
                     <span className="info-val">{c.category} {c.urgent && <span className="urgent-badge-inline">Urgent</span>}</span>
+                    <span className="ai-category-pill" style={{ marginTop: '2px' }}>
+                      🤖 {c.aiCategory || c.category}
+                    </span>
                   </div>
                   <div className="card-info-item">
                     <span className="info-lbl">Priority</span>
@@ -795,6 +806,17 @@ export default function MyComplaintsPage() {
                     <span className="status-label">Current Status</span>
                     <span className={`status-badge-outline ${selectedComplaint.status.toLowerCase().replace(' ', '-')}`}>
                       {selectedComplaint.status}
+                    </span>
+                  </div>
+                  <div className="status-row">
+                    <span className="status-label">Category</span>
+                    <span className="status-val">{selectedComplaint.category}</span>
+                  </div>
+                  <div className="status-row">
+                    <span className="status-label">AI Detected</span>
+                    <span className="status-val" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#2563eb', fontWeight: 700 }}>
+                      🤖 {selectedComplaint.aiCategory || selectedComplaint.category}
+                      {selectedComplaint.aiConfidence ? ` (${Math.round(selectedComplaint.aiConfidence * 100)}%)` : ''}
                     </span>
                   </div>
                   <div className="status-row">

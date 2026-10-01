@@ -358,13 +358,16 @@ export default function ComplaintStatusPage() {
                 </div>
               </div>
 
-              <div className="info-badge-row">
+              <div className="info-badge-row" style={{ flexWrap: 'wrap', gap: '6px' }}>
                 <span className={`status-badge-outline ${currentComplaint.status.toLowerCase().replace(' ', '-')}`}>
                   {currentComplaint.status}
                 </span>
                 <span className={`priority-badge-dot ${currentComplaint.priority.toLowerCase()}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '9999px', background: '#f1f5f9', fontSize: '0.72rem', fontWeight: 700 }}>
                   <span className={`priority-badge-dot ${currentComplaint.priority.toLowerCase()}`} />
                   {currentComplaint.priority}
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '9999px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', fontSize: '0.72rem', fontWeight: 700 }}>
+                  🤖 AI: {currentComplaint.aiCategory || currentComplaint.category}
                 </span>
               </div>
 
