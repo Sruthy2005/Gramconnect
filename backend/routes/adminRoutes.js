@@ -21,7 +21,9 @@ const {
   updatePanchayatAdmin,
   togglePanchayatAdminStatus,
   deletePanchayatAdmin,
-  getPanchayatAdminDashboardStats
+  getPanchayatAdminDashboardStats,
+  getDuplicateComplaintGroups,
+  updateComplaintDuplicateStatus
 } = require('../controllers/adminController');
 const {
   getAllCommunityPosts,
@@ -50,6 +52,9 @@ router.get('/stats', adminGuard, getAdminStats);
 
 router.route('/complaints')
   .get(adminGuard, getAllComplaints);
+
+router.get('/complaints/duplicates/groups', adminGuard, getDuplicateComplaintGroups);
+router.put('/complaints/:id/duplicate', adminGuard, updateComplaintDuplicateStatus);
 
 router.get('/complaints/export', adminGuard, exportComplaintsAdmin);
 

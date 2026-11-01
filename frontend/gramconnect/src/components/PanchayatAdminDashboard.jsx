@@ -61,6 +61,12 @@ export default function PanchayatAdminDashboard() {
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [complaintModalOpen, setComplaintModalOpen] = useState(false);
 
+  // Duplicate complaints
+  const [duplicateGroups, setDuplicateGroups] = useState([]);
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
+  const [duplicateError, setDuplicateError] = useState(null);
+  const [updatingDuplicateId, setUpdatingDuplicateId] = useState(null);
+
   // Citizens
   const [citizens, setCitizens] = useState([]);
   const [loadingCitizens, setLoadingCitizens] = useState(false);
@@ -133,6 +139,21 @@ export default function PanchayatAdminDashboard() {
       console.error('[PA] Failed to load citizens:', err);
     } finally {
       setLoadingCitizens(false);
+    }
+  };
+
+  const fetchDuplicateGroups = async () => {
+    setLoadingDuplicates(true);
+    setDuplicateError(null);
+    try {
+      const res = await api.get('/admin/complaints/duplicates/groups');
+      if (res.data?.success) setDuplicateGroups(res.data.groups || []);
+      else setDuplicateError('Unexpected response from server.');
+    } catch (err) {
+      console.error('[PA] Failed to load duplicate groups:', err);
+      setDuplicateError(err.response?.data?.message || 'Failed to load duplicate complaints. Please check your connection.');
+    } finally {
+      setLoadingDuplicates(false);
     }
   };
 
@@ -264,6 +285,7 @@ export default function PanchayatAdminDashboard() {
   useEffect(() => {
     fetchStats();
     fetchNotifications();
+    fetchDuplicateGroups(); // load duplicates early so badge count shows
   }, []);
 
   useEffect(() => {
@@ -271,6 +293,7 @@ export default function PanchayatAdminDashboard() {
     if (activeTab === 'citizens') fetchCitizens();
     if (activeTab === 'notifications') fetchNotifications();
     if (activeTab === 'announcements') fetchAnnouncements();
+    if (activeTab === 'duplicates') fetchDuplicateGroups();
   }, [activeTab]);
 
   useEffect(() => {
@@ -474,6 +497,19 @@ export default function PanchayatAdminDashboard() {
             <span>Complaints</span>
           </button>
           <button
+            className={`sidebar-item ${activeTab === 'duplicates' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('duplicates'); setSidebarOpen(false); }}
+            style={{ position: 'relative' }}
+          >
+            <ShieldCheck size={18} />
+            <span>Duplicates</span>
+            {duplicateGroups.length > 0 && (
+              <span style={{ marginLeft: 'auto', background: '#f59e0b', color: '#fff', fontSize: '0.65rem', fontWeight: 800, borderRadius: '99px', padding: '1px 7px', minWidth: '20px', textAlign: 'center' }}>
+                {duplicateGroups.length}
+              </span>
+            )}
+          </button>
+          <button
             className={`sidebar-item ${activeTab === 'citizens' ? 'active' : ''}`}
             onClick={() => { setActiveTab('citizens'); setSidebarOpen(false); }}
           >
@@ -595,6 +631,18 @@ export default function PanchayatAdminDashboard() {
                 <div className="stat-info">
                   {loadingStats ? <span className="skeleton-text-lg" /> : <span className="stat-number">{stats.resolvedComplaints || 0}</span>}
                   <span className="stat-label">Resolved</span>
+                </div>
+              </div>
+              <div className="stat-card" onClick={() => setActiveTab('duplicates')} style={{ cursor: 'pointer' }}>
+                <span className="stat-accent" style={{ background: '#f59e0b' }} />
+                <div className="stat-info">
+                  <span className="stat-number" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {duplicateGroups.length}
+                    {duplicateGroups.length > 0 && (
+                      <span style={{ width: '10px', height: '10px', background: '#f59e0b', borderRadius: '50%', display: 'inline-block', animation: 'pulse 2s ease-in-out infinite' }} />
+                    )}
+                  </span>
+                  <span className="stat-label">Duplicate Groups</span>
                 </div>
               </div>
             </div>
@@ -747,13 +795,14 @@ export default function PanchayatAdminDashboard() {
                         <th>Citizen</th>
                         <th>Status</th>
                         <th>Priority</th>
+                        <th>Dup</th>
                         <th>Date</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {complaints.map(c => (
-                        <tr key={c._id}>
+                        <tr key={c._id} style={{ background: c.isDuplicate ? 'rgba(245,158,11,0.04)' : undefined }}>
                           <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>{c.complaintId}</td>
                           <td style={{ fontWeight: 600, color: '#1e293b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</td>
                           <td>
@@ -775,6 +824,13 @@ export default function PanchayatAdminDashboard() {
                               {c.priority || 'Normal'}
                             </span>
                           </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {c.isDuplicate ? (
+                              <span title={`Duplicate (${Math.round((c.duplicateConfidence||0)*100)}%)`} style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.68rem', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', whiteSpace: 'nowrap' }}>⚠ Dup</span>
+                            ) : c.duplicateConfidence >= 0.5 ? (
+                              <span title={`Possible duplicate (${Math.round((c.duplicateConfidence||0)*100)}%)`} style={{ background: '#fff7ed', color: '#c2410c', fontSize: '0.68rem', fontWeight: 700, padding: '3px 7px', borderRadius: '6px', whiteSpace: 'nowrap' }}>? Sim</span>
+                            ) : '—'}
+                          </td>
                           <td style={{ color: '#64748b' }}>{formatDate(c.createdAt)}</td>
                           <td>
                             <button
@@ -790,6 +846,175 @@ export default function PanchayatAdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================== DUPLICATES TAB ==================== */}
+        {activeTab === 'duplicates' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Duplicate Complaints</h1>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                  AI-flagged similar complaints in {user?.panchayat || 'your panchayat'} — review and confirm or dismiss
+                </p>
+              </div>
+              <button className="admin-btn secondary" onClick={fetchDuplicateGroups} style={{ gap: '6px' }}>
+                <RefreshCw size={14} className={loadingDuplicates ? 'animate-spin' : ''} /> Refresh
+              </button>
+            </div>
+
+            {loadingDuplicates ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
+                <span style={{ width: '36px', height: '36px', border: '3px solid #f59e0b', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+              </div>
+            ) : duplicateError ? (
+              <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #fecaca', padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
+                <AlertTriangle size={40} style={{ marginBottom: '12px', color: '#ef4444', opacity: 0.7 }} />
+                <p style={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Failed to load duplicate complaints</p>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '16px' }}>{duplicateError}</p>
+                <button className="admin-btn primary" onClick={fetchDuplicateGroups} style={{ margin: '0 auto' }}>Try Again</button>
+              </div>
+            ) : duplicateGroups.length === 0 ? (
+              <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '64px', textAlign: 'center', color: '#94a3b8' }}>
+                <CheckCircle2 size={40} style={{ marginBottom: '12px', opacity: 0.4, color: '#10b981' }} />
+                <p style={{ fontWeight: 700, color: '#1e293b' }}>No duplicate complaints detected</p>
+                <p style={{ fontSize: '0.82rem', marginTop: '4px' }}>The AI system has not flagged any matching complaints in your panchayat area.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {duplicateGroups.map((group, gi) => (
+                  <div key={gi} style={{ background: '#fff', borderRadius: '16px', border: '2px solid #fef3c7', padding: '20px', boxShadow: '0 2px 8px rgba(245,158,11,0.08)' }}>
+                    {/* Group header */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                      <span style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.72rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        ⚠ Duplicate Group
+                      </span>
+                      {group.duplicates?.length > 0 && (
+                        <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+                          {group.duplicates.length} possible duplicate{group.duplicates.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Primary complaint */}
+                    {group.primaryComplaint && (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px', marginBottom: '12px' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>Original Complaint</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>{group.primaryComplaint.title}</div>
+                            <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '2px' }}>
+                              ID: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{group.primaryComplaint.complaintId}</span>
+                              &nbsp;·&nbsp;{group.primaryComplaint.category}
+                              &nbsp;·&nbsp;{group.primaryComplaint.city || group.primaryComplaint.ward || ''}
+                            </div>
+                          </div>
+                          <span className="status-pill" style={{ ...getStatusBadgeStyle(group.primaryComplaint.status), fontWeight: 700, padding: '4px 10px', borderRadius: '8px', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                            {group.primaryComplaint.status}
+                          </span>
+                        </div>
+                        {group.primaryComplaint.description && (
+                          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '8px', lineHeight: 1.5 }}>
+                            {group.primaryComplaint.description.slice(0, 160)}{group.primaryComplaint.description.length > 160 ? '…' : ''}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Duplicate candidates */}
+                    {group.duplicates?.map((dup, di) => (
+                      <div key={di} style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '14px', marginBottom: '10px' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#c2410c', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
+                          {dup.isDuplicate ? '⚠ Confirmed Duplicate' : '? Possible Duplicate'}
+                          &nbsp;·&nbsp;{Math.round((dup.duplicateConfidence || 0) * 100)}% Match
+                          {dup.distanceMeters != null && ` · ~${dup.distanceMeters}m away`}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>{dup.title}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px' }}>
+                              ID: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{dup.complaintId}</span>
+                              &nbsp;·&nbsp;{dup.category}
+                              {dup.user && !dup.anonymous && <>&nbsp;·&nbsp;{dup.user.fullName}</>}
+                            </div>
+                            {dup.description && (
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', lineHeight: 1.5 }}>
+                                {dup.description.slice(0, 120)}{dup.description.length > 120 ? '…' : ''}
+                              </div>
+                            )}
+                          </div>
+                          <span className="status-pill" style={{ ...getStatusBadgeStyle(dup.status), fontWeight: 700, padding: '4px 8px', borderRadius: '8px', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                            {dup.status}
+                          </span>
+                        </div>
+                        {/* Action buttons */}
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                          <button
+                            disabled={updatingDuplicateId === dup._id}
+                            onClick={async () => {
+                              setUpdatingDuplicateId(dup._id);
+                              try {
+                                const targetPrimaryId = (group.primaryId && group.primaryId !== 'unassigned')
+                                  ? group.primaryId
+                                  : (group.primaryComplaint?._id || undefined);
+                                await api.put(`/admin/complaints/${dup._id}/duplicate`, {
+                                  isDuplicate: true,
+                                  duplicateOf: targetPrimaryId,
+                                  duplicateConfidence: dup.duplicateConfidence || 0.85
+                                });
+                                showToast('Complaint confirmed as duplicate');
+                                fetchDuplicateGroups();
+                                fetchComplaints();
+                              } catch (err) {
+                                showToast(err.response?.data?.message || 'Failed to update', 'error');
+                              } finally {
+                                setUpdatingDuplicateId(null);
+                              }
+                            }}
+                            className="admin-btn primary"
+                            style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#b45309', borderColor: '#b45309' }}
+                          >
+                            {updatingDuplicateId === dup._id ? 'Saving...' : '✓ Confirm Duplicate'}
+                          </button>
+                          <button
+                            disabled={updatingDuplicateId === dup._id}
+                            onClick={async () => {
+                              setUpdatingDuplicateId(dup._id);
+                              try {
+                                await api.put(`/admin/complaints/${dup._id}/duplicate`, {
+                                  isDuplicate: false,
+                                  duplicateOf: null,
+                                  duplicateConfidence: 0
+                                });
+                                showToast('Duplicate flag dismissed — complaint is independent');
+                                fetchDuplicateGroups();
+                                fetchComplaints();
+                              } catch (err) {
+                                showToast(err.response?.data?.message || 'Failed to update', 'error');
+                              } finally {
+                                setUpdatingDuplicateId(null);
+                              }
+                            }}
+                            className="admin-btn secondary"
+                            style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                          >
+                            ✕ Dismiss Flag
+                          </button>
+                          <button
+                            onClick={() => { setSelectedComplaint(dup); setComplaintModalOpen(true); }}
+                            className="admin-btn secondary"
+                            style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                          >
+                            <Eye size={12} style={{ verticalAlign: 'middle', marginRight: '3px' }} />View Details
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1198,7 +1423,15 @@ export default function PanchayatAdminDashboard() {
         <div className="admin-modal-overlay">
           <div className="admin-modal-container" style={{ padding: '28px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>Complaint Details</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>Complaint Details</h2>
+                {selectedComplaint.isDuplicate && (
+                  <span style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>⚠ Duplicate</span>
+                )}
+                {!selectedComplaint.isDuplicate && selectedComplaint.duplicateConfidence >= 0.5 && (
+                  <span style={{ background: '#fff7ed', color: '#c2410c', fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>? Possible Dup</span>
+                )}
+              </div>
               <button onClick={() => setComplaintModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569' }}>
                 <X size={22} />
               </button>
@@ -1221,17 +1454,92 @@ export default function PanchayatAdminDashboard() {
                   { label: 'Category', value: selectedComplaint.category },
                   { label: 'AI Detected Category', value: selectedComplaint.aiCategory ? `🤖 ${selectedComplaint.aiCategory}` : selectedComplaint.category },
                   { label: 'Priority', value: selectedComplaint.priority || 'Normal' },
-                  { label: 'District', value: selectedComplaint.district },
+                  { label: 'Location', value: [selectedComplaint.city, selectedComplaint.ward, selectedComplaint.district].filter(Boolean).join(', ') || '—' },
                   { label: 'Submitted By', value: selectedComplaint.anonymous ? 'Anonymous' : selectedComplaint.user?.fullName || '—' },
                   { label: 'Submitted On', value: formatDate(selectedComplaint.createdAt) },
                   { label: 'Department', value: selectedComplaint.assignedDepartment || 'Not Assigned' },
-                ].map((item, i) => (
+                  selectedComplaint.latitude && { label: 'GPS', value: `${Number(selectedComplaint.latitude).toFixed(4)}, ${Number(selectedComplaint.longitude).toFixed(4)}` },
+                ].filter(Boolean).map((item, i) => (
                   <div key={i} className="user-detail-item" style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px', border: '1px solid #e2e8f0' }}>
                     <span className="user-detail-label">{item.label}</span>
                     <span className="user-detail-value">{item.value}</span>
                   </div>
                 ))}
               </div>
+
+              {/* Duplicate info section — shown when this complaint is flagged */}
+              {(selectedComplaint.isDuplicate || selectedComplaint.duplicateConfidence >= 0.5) && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '14px' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px' }}>
+                    {selectedComplaint.isDuplicate ? '⚠ Confirmed Duplicate' : '? Possible Duplicate'}
+                    {selectedComplaint.duplicateConfidence > 0 && ` — ${Math.round(selectedComplaint.duplicateConfidence * 100)}% confidence`}
+                  </div>
+                  {selectedComplaint.duplicateOf && (
+                    <div style={{ fontSize: '0.82rem', color: '#475569', marginBottom: '8px' }}>
+                      Linked to original complaint: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1e293b' }}>
+                        {selectedComplaint.duplicateOf?.complaintId || selectedComplaint.duplicateOf}
+                      </span>
+                      {selectedComplaint.duplicateOf?.title && <> — {selectedComplaint.duplicateOf.title}</>}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                    <button
+                      disabled={updatingDuplicateId === selectedComplaint._id}
+                      onClick={async () => {
+                        setUpdatingDuplicateId(selectedComplaint._id);
+                        try {
+                          const res = await api.put(`/admin/complaints/${selectedComplaint._id}/duplicate`, {
+                            isDuplicate: true,
+                            duplicateOf: selectedComplaint.duplicateOf?._id || selectedComplaint.duplicateOf || undefined,
+                            duplicateConfidence: selectedComplaint.duplicateConfidence || 0.85
+                          });
+                          if (res.data?.success) {
+                            setSelectedComplaint(prev => ({ ...prev, isDuplicate: true }));
+                            showToast('Marked as confirmed duplicate');
+                            fetchDuplicateGroups();
+                            fetchComplaints();
+                          }
+                        } catch (err) {
+                          showToast(err.response?.data?.message || 'Failed to update', 'error');
+                        } finally {
+                          setUpdatingDuplicateId(null);
+                        }
+                      }}
+                      className="admin-btn primary"
+                      style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#b45309', borderColor: '#b45309' }}
+                    >
+                      {updatingDuplicateId === selectedComplaint._id ? 'Saving...' : '✓ Confirm Duplicate'}
+                    </button>
+                    <button
+                      disabled={updatingDuplicateId === selectedComplaint._id}
+                      onClick={async () => {
+                        setUpdatingDuplicateId(selectedComplaint._id);
+                        try {
+                          const res = await api.put(`/admin/complaints/${selectedComplaint._id}/duplicate`, {
+                            isDuplicate: false,
+                            duplicateOf: null,
+                            duplicateConfidence: 0
+                          });
+                          if (res.data?.success) {
+                            setSelectedComplaint(prev => ({ ...prev, isDuplicate: false, duplicateConfidence: 0, duplicateOf: null }));
+                            showToast('Duplicate flag dismissed');
+                            fetchDuplicateGroups();
+                            fetchComplaints();
+                          }
+                        } catch (err) {
+                          showToast(err.response?.data?.message || 'Failed to update', 'error');
+                        } finally {
+                          setUpdatingDuplicateId(null);
+                        }
+                      }}
+                      className="admin-btn secondary"
+                      style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                    >
+                      ✕ Dismiss Flag
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Update status actions */}
               <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px', marginTop: '8px' }}>
@@ -1401,7 +1709,7 @@ export default function PanchayatAdminDashboard() {
               {selectedAnnItem.attachment && (
                 <div style={{ textAlign: 'center', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px', background: '#f8fafc' }}>
                   <img
-                    src={selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `http://localhost:5000${selectedAnnItem.attachment}`}
+                    src={selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `https://gramconnect-backend.vercel.app${selectedAnnItem.attachment}`}
                     alt="Announcement attachment"
                     style={{ maxWidth: '100%', maxHeight: '240px', borderRadius: '8px', objectFit: 'contain' }}
                   />

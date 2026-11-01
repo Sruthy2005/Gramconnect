@@ -576,6 +576,11 @@ export default function MyComplaintsPage() {
                           <span className="ai-category-pill" title={`AI Classified: ${c.aiCategory || c.category}`}>
                             🤖 {c.aiCategory || c.category}
                           </span>
+                          {c.isDuplicate && (
+                            <span className="ai-category-pill" style={{ background: '#fef3c7', color: '#92400e', borderColor: '#fde68a' }} title={`Duplicate of ${c.duplicateOf?.complaintId || 'existing complaint'}`}>
+                              🔗 Duplicate ({Math.round((c.duplicateConfidence || 0) * 100)}%)
+                            </span>
+                          )}
                         </div>
                         {c.urgent && <span className="urgent-badge-inline">Urgent</span>}
                       </td>
@@ -823,6 +828,14 @@ export default function MyComplaintsPage() {
                     <span className="status-label">Department</span>
                     <span className="status-val">{selectedComplaint.assignedDepartment}</span>
                   </div>
+                  {selectedComplaint.isDuplicate && (
+                    <div className="status-row">
+                      <span className="status-label">Duplicate Status</span>
+                      <span className="status-val" style={{ color: '#d97706', fontWeight: 700 }}>
+                        🔗 Linked to {selectedComplaint.duplicateOf?.complaintId || 'existing report'} ({Math.round((selectedComplaint.duplicateConfidence || 0) * 100)}% match)
+                      </span>
+                    </div>
+                  )}
                   <div className="status-row">
                     <span className="status-label">Report Type</span>
                     <span className="status-val">{selectedComplaint.anonymous ? 'Anonymous Report' : 'Public Profile'}</span>

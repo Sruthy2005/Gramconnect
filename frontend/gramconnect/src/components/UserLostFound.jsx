@@ -353,7 +353,7 @@ const UserLostFound = ({ showToast }) => {
         <div className="community-grid">
           {filteredItems.map(item => {
             const isLost = item.type === 'Lost';
-            const itemImage = item.image ? (item.image.startsWith('http') ? item.image : `http://localhost:5000${item.image}`) : null;
+            const itemImage = item.image ? (item.image.startsWith('http') ? item.image : `https://gramconnect-backend.vercel.app${item.image}`) : null;
             const normalizedStatus = getNormalizedStatus(item.status);
             const badgeStyle = getStatusBadgeStyle(item.status);
             const isOwner = currentUser && item.user?._id === currentUser._id;
@@ -722,7 +722,7 @@ const UserLostFound = ({ showToast }) => {
                 {selectedItem.image && (
                   <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', textAlign: 'center' }}>
                     <img
-                      src={selectedItem.image.startsWith('http') ? selectedItem.image : `http://localhost:5000${selectedItem.image}`}
+                      src={selectedItem.image.startsWith('http') ? selectedItem.image : `https://gramconnect-backend.vercel.app${selectedItem.image}`}
                       alt={selectedItem.itemName}
                       style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', background: '#f8fafc' }}
                     />

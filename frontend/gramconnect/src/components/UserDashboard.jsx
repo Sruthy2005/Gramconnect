@@ -132,7 +132,7 @@ export default function UserDashboard() {
     const token = localStorage.getItem('token');
     if (!token || !user) return;
 
-    const eventSource = new EventSource(`http://localhost:5000/api/notifications/stream?token=${token}`);
+    const eventSource = new EventSource(`https://gramconnect-backend.vercel.app/api/notifications/stream?token=${token}`);
 
     eventSource.addEventListener('notification', (event) => {
       try {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Navigation, Image as ImageIcon, Trash2, Send, AlertTriangle, Loader2, Sparkles, Check } from 'lucide-react';
+import { MapPin, Navigation, Image as ImageIcon, Trash2, Send, AlertTriangle, Loader2, Sparkles, Check, Clock } from 'lucide-react';
 import api from '../utils/api';
 import './ReportIssuePage.css';
 
@@ -447,6 +447,12 @@ export default function ReportIssuePage({ onNavigate }) {
   const [aiConfidence, setAiConfidence] = useState(0);
   const [isClassifying, setIsClassifying] = useState(false);
 
+  // AI Duplicate Complaint Detection State (Requirements 2, 4, 5, 6, 8)
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const [showFullDuplicateDetails, setShowFullDuplicateDetails] = useState(false);
+
   const categories = [
     'Road Damage',
     'Garbage/Waste',
@@ -574,6 +580,102 @@ export default function ReportIssuePage({ onNavigate }) {
     setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const executeSubmit = async (override = false) => {
+    setFormSubmitting(true);
+    const activeCat = category || aiDetectedCategory;
+
+    // Build multipart/form-data payload (Requirement 13)
+    const formData = new FormData();
+    formData.append('title', title.trim());
+    formData.append('description', description.trim());
+    formData.append('category', activeCat);
+    formData.append('state', state.trim());
+    formData.append('district', district.trim());
+    formData.append('taluk', taluk.trim());
+    formData.append('localBody', localBody.trim());
+    formData.append('localBodyType', localBodyType);
+    const formattedCity = `${city.trim()} (${localBody.trim()}, ${taluk.trim()} Taluk)`;
+    formData.append('city', formattedCity);
+    formData.append('ward', ward.trim());
+    formData.append('landmark', landmark.trim());
+    formData.append('pincode', pincode.trim());
+    formData.append('latitude', latitude);
+    formData.append('longitude', longitude);
+    formData.append('anonymous', anonymous);
+    formData.append('priority', priority);
+    formData.append('urgent', urgent);
+    if (override) {
+      formData.append('overrideDuplicate', 'true');
+    }
+
+    images.forEach((file) => {
+      formData.append('images', file);
+    });
+
+    try {
+      const response = await api.post('/issues', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (response.data && response.data.success) {
+        showToast('Issue Reported Successfully!', 'success');
+        // Clear fields
+        setTitle('');
+        setDescription('');
+        setCategory('');
+        setAiDetectedCategory('');
+        setAiConfidence(0);
+        setDistrict('');
+        setDistrictSearch('');
+        setTaluk('');
+        setTalukSearch('');
+        setLocalBody('');
+        setLocalBodySearch('');
+        setLocalBodyType('');
+        setPriority('Normal');
+        setCity('');
+        setWard('');
+        setLandmark('');
+        setPincode('');
+        setLatitude('');
+        setLongitude('');
+        setImages([]);
+        setImagePreviews([]);
+        setAnonymous(false);
+        setUrgent(false);
+        setErrors({});
+        setDuplicateWarning(null);
+        setShowDuplicateModal(false);
+
+        // Redirect to My Complaints Page after 1.5 seconds
+        setTimeout(() => {
+          onNavigate('complaints');
+        }, 1500);
+      }
+      setFormSubmitting(false);
+    } catch (err) {
+      // If server intercepted duplicate and returned 409 requiresConfirmation (Requirement 4)
+      if (err && (err.requiresConfirmation || err.isDuplicate || err.isPossibleDuplicate) && err.matchedComplaint) {
+        setDuplicateWarning(err);
+        setShowDuplicateModal(true);
+        setFormSubmitting(false);
+        return;
+      }
+      console.error('Failed to report issue:', err);
+      showToast(err.message || 'Failed to submit report.', 'error');
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleProceedDuplicateSubmit = async () => {
+    setShowDuplicateModal(false);
+    await executeSubmit(true);
+  };
+
+  const handleDismissDuplicateModal = () => {
+    setShowDuplicateModal(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -621,77 +723,36 @@ export default function ReportIssuePage({ onNavigate }) {
     }
 
     setErrors({});
-    setFormSubmitting(true);
 
-    // Build multipart/form-data payload (Requirement 13)
-    const formData = new FormData();
-    formData.append('title', title.trim());
-    formData.append('description', description.trim());
-    formData.append('category', activeCat);
-    formData.append('state', state.trim());
-    formData.append('district', district.trim());
-    formData.append('taluk', taluk.trim());
-    formData.append('localBody', localBody.trim());
-    formData.append('localBodyType', localBodyType);
-    const formattedCity = `${city.trim()} (${localBody.trim()}, ${taluk.trim()} Taluk)`;
-    formData.append('city', formattedCity);
-    formData.append('ward', ward.trim());
-    formData.append('landmark', landmark.trim());
-    formData.append('pincode', pincode.trim());
-    formData.append('latitude', latitude);
-    formData.append('longitude', longitude);
-    formData.append('anonymous', anonymous);
-    formData.append('priority', priority);
-    formData.append('urgent', urgent);
-
-    images.forEach((file) => {
-      formData.append('images', file);
-    });
-
+    // Perform AI Duplicate Check before final save (Requirements 2, 4, 5, 6, 8)
+    setIsCheckingDuplicate(true);
     try {
-      const response = await api.post('/issues', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const dupRes = await api.post('/issues/check-duplicate', {
+        title: title.trim(),
+        description: description.trim(),
+        category: activeCat,
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        district: district.trim(),
+        city: city.trim(),
+        ward: ward ? ward.trim() : ''
       });
 
-      if (response.data && response.data.success) {
-        showToast('Issue Reported Successfully!', 'success');
-        // Clear fields
-        setTitle('');
-        setDescription('');
-        setCategory('');
-        setAiDetectedCategory('');
-        setAiConfidence(0);
-        setDistrict('');
-        setDistrictSearch('');
-        setTaluk('');
-        setTalukSearch('');
-        setLocalBody('');
-        setLocalBodySearch('');
-        setLocalBodyType('');
-        setPriority('Normal');
-        setCity('');
-        setWard('');
-        setLandmark('');
-        setPincode('');
-        setLatitude('');
-        setLongitude('');
-        setImages([]);
-        setImagePreviews([]);
-        setAnonymous(false);
-        setUrgent(false);
-        setErrors({});
-
-        // Redirect to My Complaints Page after 1.5 seconds
-        setTimeout(() => {
-          onNavigate('complaints');
-        }, 1500);
+      if (dupRes.data && dupRes.data.success && (dupRes.data.isDuplicate || dupRes.data.isPossibleDuplicate) && dupRes.data.matchedComplaint) {
+        setDuplicateWarning(dupRes.data);
+        setShowDuplicateModal(true);
+        setIsCheckingDuplicate(false);
+        return; // Halt and show warning modal to let citizen review and decide
       }
-      setFormSubmitting(false);
-    } catch (err) {
-      console.error('Failed to report issue:', err);
-      showToast(err.message || 'Failed to submit report.', 'error');
-      setFormSubmitting(false);
+    } catch (checkErr) {
+      console.warn('Duplicate check non-blocking note:', checkErr);
+      // Graceful fallback (Requirement 8): allow manual submission even if duplicate detection fails
+    } finally {
+      setIsCheckingDuplicate(false);
     }
+
+    // If no duplicate match found, proceed directly with submission
+    await executeSubmit();
   };
 
   return (
@@ -1518,12 +1579,17 @@ export default function ReportIssuePage({ onNavigate }) {
               type="button"
               className="btn-cancel-report"
               onClick={() => onNavigate('dashboard')}
-              disabled={formSubmitting}
+              disabled={formSubmitting || isCheckingDuplicate}
             >
               Cancel
             </button>
-            <button type="submit" className="btn-submit-report" disabled={formSubmitting}>
-              {formSubmitting ? (
+            <button type="submit" className="btn-submit-report" disabled={formSubmitting || isCheckingDuplicate}>
+              {isCheckingDuplicate ? (
+                <>
+                  <Loader2 className="spinner-gps" />
+                  <span>Checking Duplicates...</span>
+                </>
+              ) : formSubmitting ? (
                 <Loader2 className="spinner-gps" />
               ) : (
                 <>
@@ -1535,6 +1601,127 @@ export default function ReportIssuePage({ onNavigate }) {
           </div>
         </div>
       </form>
+
+      {/* AI Duplicate Complaint Warning Modal (Requirements 4, 5, 6, 8, 9) */}
+      {showDuplicateModal && duplicateWarning && duplicateWarning.matchedComplaint && (
+        <div className="duplicate-modal-overlay" role="dialog" aria-modal="true">
+          <div className="duplicate-modal-card">
+            <div className="duplicate-modal-header">
+              <div className={`duplicate-icon-wrapper ${duplicateWarning.matchLevel === 'definite' ? 'definite' : 'possible'}`}>
+                <AlertTriangle size={24} />
+              </div>
+              <div className="duplicate-header-text">
+                <div className="duplicate-badge-row">
+                  <span className={`duplicate-level-badge ${duplicateWarning.matchLevel === 'definite' ? 'definite' : 'possible'}`}>
+                    {duplicateWarning.matchLevel === 'definite' ? 'Potential Duplicate Complaint' : 'Similar Complaint Found Nearby'}
+                  </span>
+                  <span className="duplicate-conf-pill">
+                    {Math.round(duplicateWarning.confidence * 100)}% Match
+                  </span>
+                </div>
+                <h3 className="duplicate-modal-title">
+                  {duplicateWarning.matchLevel === 'definite'
+                    ? 'A very similar complaint was already reported nearby'
+                    : 'Possible matching complaint found in this locality'}
+                </h3>
+                <p className="duplicate-modal-subtitle">
+                  Please review the existing report below. Submitting duplicate complaints can create redundant work for authorities. You can review the details, edit your report, or choose to submit anyway.
+                </p>
+              </div>
+            </div>
+
+            {/* Matched Complaint Details Card */}
+            <div className="duplicate-preview-card">
+              <div className="duplicate-preview-top">
+                <div className="duplicate-id-tag">
+                  <span>Complaint ID:</span>
+                  <strong>{duplicateWarning.matchedComplaint.complaintId}</strong>
+                </div>
+                <div className="duplicate-badges">
+                  <span className="duplicate-category-badge">{duplicateWarning.matchedComplaint.category}</span>
+                  <span className={`duplicate-status-badge ${String(duplicateWarning.matchedComplaint.status).toLowerCase().replace(/\s+/g, '-')}`}>
+                    {duplicateWarning.matchedComplaint.status}
+                  </span>
+                </div>
+              </div>
+
+              <h4 className="duplicate-preview-title">{duplicateWarning.matchedComplaint.title}</h4>
+
+              <p className="duplicate-preview-desc">
+                {showFullDuplicateDetails
+                  ? duplicateWarning.matchedComplaint.description
+                  : (duplicateWarning.matchedComplaint.description?.length > 140
+                      ? `${duplicateWarning.matchedComplaint.description.slice(0, 140)}...`
+                      : duplicateWarning.matchedComplaint.description)}
+              </p>
+
+              {duplicateWarning.matchedComplaint.description?.length > 140 && (
+                <button
+                  type="button"
+                  className="duplicate-expand-btn"
+                  onClick={() => setShowFullDuplicateDetails(prev => !prev)}
+                >
+                  {showFullDuplicateDetails ? 'Show less' : 'View full description'}
+                </button>
+              )}
+
+              <div className="duplicate-meta-grid">
+                <div className="dup-meta-item">
+                  <MapPin size={15} />
+                  <span>
+                    {duplicateWarning.matchedComplaint.city || 'Nearby'}
+                    {duplicateWarning.matchedComplaint.ward ? ` (${duplicateWarning.matchedComplaint.ward})` : ''}
+                  </span>
+                </div>
+                {duplicateWarning.distanceMeters !== null && (
+                  <div className="dup-meta-item">
+                    <Navigation size={15} />
+                    <span>Approx. {duplicateWarning.distanceMeters < 1000 ? `${duplicateWarning.distanceMeters}m away` : `${(duplicateWarning.distanceMeters / 1000).toFixed(1)}km away`}</span>
+                  </div>
+                )}
+                <div className="dup-meta-item">
+                  <Clock size={15} />
+                  <span>Reported {new Date(duplicateWarning.matchedComplaint.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="dup-meta-item">
+                  <Sparkles size={15} />
+                  <span>AI Similarity: {Math.round((duplicateWarning.similarity || 0) * 100)}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="duplicate-modal-actions">
+              <button
+                type="button"
+                className="btn-edit-report"
+                onClick={handleDismissDuplicateModal}
+              >
+                Edit My Report
+              </button>
+              <button
+                type="button"
+                className="btn-submit-anyway"
+                onClick={handleProceedDuplicateSubmit}
+                disabled={formSubmitting}
+              >
+                {formSubmitting ? (
+                  <>
+                    <Loader2 className="spinner-gps" size={16} /> Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} /> Submit My Report Anyway
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="duplicate-modal-footnote">
+              GramConnect never rejects or deletes your complaint. If your issue is distinct or ongoing, you can proceed.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

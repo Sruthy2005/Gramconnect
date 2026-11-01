@@ -208,7 +208,11 @@ const seedMockDataIfEmpty = async (adminId) => {
 // @route   GET /api/admin/stats
 // @access  Private (Admin)
 const getAdminStats = asyncHandler(async (req, res) => {
-  await seedMockDataIfEmpty(req.user._id);
+  // Only seed mock data for super/main admins – panchayat admins should only see real data
+  const isRegularAdmin = req.user.role && ['admin', 'Admin', 'SUPER_ADMIN', 'super_admin'].includes(req.user.role);
+  if (isRegularAdmin) {
+    await seedMockDataIfEmpty(req.user._id);
+  }
 
   const { startDate, endDate } = req.query;
   const complaintFilter = {};
@@ -1041,15 +1045,21 @@ const getAllUsers = asyncHandler(async (req, res) => {
     })
   );
 
-  // Calculate summary metrics for the header statistics cards
+  // Calculate summary metrics – scoped to panchayat admin's panchayat if applicable
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+  // Base stats filter – mirrors the main query filter for correct panchayat-scoped counts
+  const statsBaseFilter = { role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true } };
+  if (isPanchayatAdminUser && req.user.panchayatId) {
+    statsBaseFilter.panchayatId = req.user.panchayatId;
+  }
+
   const [totalUsersCount, activeUsersCount, blockedUsersCount, newUsersCount] = await Promise.all([
-    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true } }),
-    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true }, status: { $ne: 'Blocked' } }),
-    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true }, status: 'Blocked' }),
-    User.countDocuments({ role: { $in: ['citizen', 'Citizen'] }, isDeleted: { $ne: true }, createdAt: { $gte: startOfMonth } })
+    User.countDocuments(statsBaseFilter),
+    User.countDocuments({ ...statsBaseFilter, status: { $ne: 'Blocked' } }),
+    User.countDocuments({ ...statsBaseFilter, status: 'Blocked' }),
+    User.countDocuments({ ...statsBaseFilter, createdAt: { $gte: startOfMonth } })
   ]);
 
   res.status(200).json({
@@ -1783,6 +1793,214 @@ const getPanchayatAdminDashboardStats = asyncHandler(async (req, res) => {
   });
 });
 
+const getDuplicateComplaintGroups = asyncHandler(async (req, res) => {
+  // Determine if caller is a panchayat admin so we can scope queries
+  const isPanchayatAdmin = req.user.role &&
+    ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+
+  // Build base duplicate query, scoped to admin's panchayat if applicable
+  const dupBaseQuery = {
+    $or: [
+      { isDuplicate: true },
+      { duplicateOf: { $ne: null } },
+      { duplicateConfidence: { $gte: 0.50 } }
+    ]
+  };
+  if (isPanchayatAdmin && req.user.panchayatId) {
+    dupBaseQuery.panchayatId = req.user.panchayatId;
+  } else if (isPanchayatAdmin && !req.user.panchayatId) {
+    // No panchayat assigned – return empty
+    return res.status(200).json({ success: true, count: 0, groups: [] });
+  }
+
+  // 1. Query all complaints that are marked as duplicate OR have duplicateOf OR duplicateConfidence >= 0.50
+  const allDuplicates = await Complaint.find(dupBaseQuery)
+    .populate('user', 'fullName email mobile')
+    .populate('panchayatId', 'name district state')
+    .populate({
+      path: 'duplicateOf',
+      select: 'complaintId title description category status city ward district state createdAt priority latitude longitude user panchayatId images',
+      populate: [
+        { path: 'user', select: 'fullName email mobile' },
+        { path: 'panchayatId', select: 'name district state' }
+      ]
+    })
+    .sort({ createdAt: -1 });
+
+  // Map into groups keyed by primary complaint ID
+  const groupsMap = new Map();
+
+  for (const dup of allDuplicates) {
+    const primaryId = dup.duplicateOf ? dup.duplicateOf._id.toString() : 'unassigned';
+    
+    if (!groupsMap.has(primaryId)) {
+      groupsMap.set(primaryId, {
+        primaryId,
+        primaryComplaint: dup.duplicateOf || null,
+        duplicates: []
+      });
+    }
+
+    groupsMap.get(primaryId).duplicates.push(dup);
+  }
+
+  // Also query full primary complaint details if missing
+  const groups = Array.from(groupsMap.values());
+  for (const group of groups) {
+    if (group.primaryId !== 'unassigned' && (!group.primaryComplaint || !group.primaryComplaint.title)) {
+      const fullPrimary = await Complaint.findById(group.primaryId)
+        .populate('user', 'fullName email mobile')
+        .populate('panchayatId', 'name district state');
+      if (fullPrimary) {
+        group.primaryComplaint = fullPrimary;
+      }
+    }
+  }
+
+  // 2. If groups are empty or scan is requested, check recent complaints for unlinked potential duplicates
+  if (groups.length === 0 || req.query.scan === 'true') {
+    try {
+      const recentQuery = {
+        isDuplicate: { $ne: true },
+        duplicateOf: null
+      };
+      if (isPanchayatAdmin && req.user.panchayatId) {
+        recentQuery.panchayatId = req.user.panchayatId;
+      }
+
+      const recent = await Complaint.find(recentQuery)
+        .sort({ createdAt: -1 })
+        .limit(40)
+        .populate('user', 'fullName email mobile');
+
+      const { checkDuplicateComplaint } = require('../utils/duplicateDetector');
+      const visited = new Set();
+
+      for (let i = 0; i < recent.length; i++) {
+        const c1 = recent[i];
+        if (visited.has(c1._id.toString())) continue;
+
+        for (let j = i + 1; j < recent.length; j++) {
+          const c2 = recent[j];
+          if (visited.has(c2._id.toString())) continue;
+
+          // Quick category / district similarity check
+          if (c1.category === c2.category || c1.district === c2.district) {
+            const check = await checkDuplicateComplaint({
+              title: c2.title,
+              description: c2.description,
+              category: c2.category,
+              latitude: c2.latitude,
+              longitude: c2.longitude,
+              district: c2.district,
+              city: c2.city,
+              ward: c2.ward,
+              panchayatId: c2.panchayatId  // pass panchayatId so check is scoped
+            });
+
+            if (check.isDuplicate || check.isPossibleDuplicate || check.confidence >= 0.55) {
+              visited.add(c2._id.toString());
+              groups.push({
+                primaryId: c1._id.toString(),
+                primaryComplaint: c1,
+                duplicates: [{
+                  ...c2.toObject(),
+                  duplicateConfidence: check.confidence,
+                  distanceMeters: check.distanceMeters,
+                  isPotential: true
+                }]
+              });
+              break;
+            }
+          }
+        }
+      }
+    } catch (scanErr) {
+      console.warn('[Duplicate Detector] Admin group scan note:', scanErr.message);
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    count: groups.length,
+    groups
+  });
+});
+
+// @desc    Link, confirm, or unlink duplicate complaint
+// @route   PUT /api/admin/complaints/:id/duplicate
+// @access  Private (Admin)
+const updateComplaintDuplicateStatus = asyncHandler(async (req, res) => {
+  const { isDuplicate, duplicateOf, duplicateConfidence } = req.body;
+  const complaint = await Complaint.findById(req.params.id);
+
+  if (!complaint) {
+    return res.status(404).json({ message: 'Complaint not found' });
+  }
+
+  // ─── PANCHAYAT ADMIN ISOLATION ────────────────────────────────────────────
+  const isPanchayatAdmin = req.user.role &&
+    ['panchayat_admin', 'PANCHAYAT_ADMIN'].includes(req.user.role);
+  if (isPanchayatAdmin) {
+    if (!req.user.panchayatId) {
+      return res.status(403).json({ message: 'No panchayat assigned to this admin account.' });
+    }
+    if (!complaint.panchayatId || complaint.panchayatId.toString() !== req.user.panchayatId.toString()) {
+      return res.status(403).json({ message: 'Access denied: complaint belongs to a different panchayat.' });
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  let primaryComplaint = null;
+  if (duplicateOf) {
+    primaryComplaint = await Complaint.findById(duplicateOf);
+    if (!primaryComplaint) {
+      return res.status(404).json({ message: 'Target primary complaint to link not found' });
+    }
+    if (primaryComplaint._id.toString() === complaint._id.toString()) {
+      return res.status(400).json({ message: 'A complaint cannot be linked to itself as duplicate' });
+    }
+    // Also enforce that the primary complaint is in the same panchayat
+    if (isPanchayatAdmin && primaryComplaint.panchayatId &&
+        primaryComplaint.panchayatId.toString() !== req.user.panchayatId.toString()) {
+      return res.status(403).json({ message: 'Access denied: primary complaint belongs to a different panchayat.' });
+    }
+  }
+
+  complaint.isDuplicate = isDuplicate !== undefined ? Boolean(isDuplicate) : complaint.isDuplicate;
+  complaint.duplicateOf = duplicateOf !== undefined ? duplicateOf : (isDuplicate === false ? null : complaint.duplicateOf);
+  if (duplicateConfidence !== undefined) {
+    complaint.duplicateConfidence = Number(duplicateConfidence);
+  } else if (!complaint.isDuplicate) {
+    complaint.duplicateConfidence = 0;
+  }
+
+  await complaint.save();
+
+  // Log activity notification
+  const actionText = complaint.isDuplicate
+    ? `marked as duplicate of ${primaryComplaint ? primaryComplaint.complaintId : 'existing report'}`
+    : 'unlinked and confirmed as independent report';
+
+  await createNotification({
+    recipientRole: 'admin',
+    title: 'Duplicate Status Updated',
+    message: `Complaint ${complaint.complaintId} was ${actionText} by ${req.user.fullName || 'Admin'}.`,
+    type: 'Information',
+    relatedComplaint: complaint._id
+  });
+
+  const updatedComplaint = await Complaint.findById(complaint._id)
+    .populate('user', 'fullName email')
+    .populate('duplicateOf', 'complaintId title category status');
+
+  res.status(200).json({
+    success: true,
+    message: `Complaint ${complaint.isDuplicate ? 'linked as duplicate' : 'unlinked'} successfully`,
+    complaint: updatedComplaint
+  });
+});
+
 module.exports = {
   getAdminStats,
   getAllComplaints,
@@ -1804,6 +2022,8 @@ module.exports = {
   updatePanchayatAdmin,
   togglePanchayatAdminStatus,
   deletePanchayatAdmin,
-  getPanchayatAdminDashboardStats
+  getPanchayatAdminDashboardStats,
+  getDuplicateComplaintGroups,
+  updateComplaintDuplicateStatus
 };
 

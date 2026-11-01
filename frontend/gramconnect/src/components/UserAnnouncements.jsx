@@ -164,7 +164,7 @@ const UserAnnouncements = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
           {filteredAnnouncements.map(ann => {
             const hasAttachment = ann.attachment;
-            const attachmentImage = hasAttachment ? (ann.attachment.startsWith('http') ? ann.attachment : `http://localhost:5000${ann.attachment}`) : null;
+            const attachmentImage = hasAttachment ? (ann.attachment.startsWith('http') ? ann.attachment : `https://gramconnect-backend.vercel.app${ann.attachment}`) : null;
             const priorityBadge = getPriorityStyle(ann.priority);
 
             return (
@@ -242,7 +242,7 @@ const UserAnnouncements = () => {
       {/* DETAIL OVERLAY MODAL */}
       {detailsOpen && selectedAnn && (() => {
         const priorityStyle = getPriorityStyle(selectedAnn.priority);
-        const attachmentImage = selectedAnn.attachment ? (selectedAnn.attachment.startsWith('http') ? selectedAnn.attachment : `http://localhost:5000${selectedAnn.attachment}`) : null;
+        const attachmentImage = selectedAnn.attachment ? (selectedAnn.attachment.startsWith('http') ? selectedAnn.attachment : `https://gramconnect-backend.vercel.app${selectedAnn.attachment}`) : null;
         return (
           <div className="admin-modal-overlay" onClick={() => setDetailsOpen(false)}>
             <div className="admin-modal-container" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '600px' }}>

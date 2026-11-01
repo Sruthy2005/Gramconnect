@@ -78,6 +78,8 @@ export default function AdminDashboard() {
       case 'complaints':
       case 'complaint-details':
         return 'Complaint Management';
+      case 'duplicates':
+        return 'Duplicate Complaints Management';
       case 'users':
         return 'Users Management';
       case 'community':
@@ -105,6 +107,7 @@ export default function AdminDashboard() {
     const hash = window.location.hash;
     if (hash.startsWith('#admin/complaints/')) return 'complaint-details';
     if (hash.startsWith('#admin/complaints')) return 'complaints';
+    if (hash === '#admin/duplicates') return 'duplicates';
     if (hash === '#admin/users') return 'users';
     if (hash === '#admin/community') return 'community';
     if (hash === '#admin/lost-found') return 'lost_found';
@@ -155,6 +158,12 @@ export default function AdminDashboard() {
     categoryDistribution: [],
     complaintTrends: []
   });
+
+  // Duplicate complaints states
+  const [duplicateGroups, setDuplicateGroups] = useState([]);
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
+  const [duplicateError, setDuplicateError] = useState(null);
+  const [updatingDuplicateId, setUpdatingDuplicateId] = useState(null);
 
   // Users Management states
   const [users, setUsers] = useState([]);
@@ -366,6 +375,9 @@ export default function AdminDashboard() {
     } else if (hash === '#admin/complaints') {
       setViewingComplaintId(null);
       setActiveTab('complaints');
+    } else if (hash === '#admin/duplicates') {
+      setViewingComplaintId(null);
+      setActiveTab('duplicates');
     } else if (hash === '#admin/notifications') {
       setViewingComplaintId(null);
       setActiveTab('notifications');
@@ -458,11 +470,80 @@ export default function AdminDashboard() {
         }));
         setRecentComplaints(formattedRecent);
       }
+
+      // 3. Fetch Duplicate Groups in parallel
+      fetchDuplicateGroups();
     } catch (err) {
       console.error('[DEV ERROR] Failed to synchronize dashboard with MongoDB:', err);
       setError(err.message || 'Failed to establish database synchronization with Panchayat Server.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchDuplicateGroups = async () => {
+    setLoadingDuplicates(true);
+    setDuplicateError(null);
+    try {
+      const res = await api.get('/admin/complaints/duplicates/groups');
+      if (res.data?.success) {
+        setDuplicateGroups(res.data.groups || []);
+      } else {
+        setDuplicateError('Unexpected response from server.');
+      }
+    } catch (err) {
+      console.error('[Admin] Failed to load duplicate groups:', err);
+      setDuplicateError(err.response?.data?.message || 'Failed to load duplicate complaints.');
+    } finally {
+      setLoadingDuplicates(false);
+    }
+  };
+
+  const handleConfirmDuplicate = async (dup, targetPrimaryId) => {
+    if (!dup?._id) return;
+    setUpdatingDuplicateId(dup._id);
+    try {
+      const resolvedPrimaryId = (targetPrimaryId && targetPrimaryId !== 'unassigned')
+        ? targetPrimaryId
+        : (dup.duplicateOf?._id || dup.duplicateOf || undefined);
+
+      await api.put(`/admin/complaints/${dup._id}/duplicate`, {
+        isDuplicate: true,
+        duplicateOf: resolvedPrimaryId,
+        duplicateConfidence: dup.duplicateConfidence || 0.85
+      });
+      showToast('Complaint confirmed as duplicate');
+      await fetchDuplicateGroups();
+      await fetchData();
+      if (detailsComplaint && detailsComplaint._id === dup._id) {
+        setDetailsComplaint(prev => ({ ...prev, isDuplicate: true, duplicateConfidence: dup.duplicateConfidence || 0.85 }));
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update duplicate status', 'error');
+    } finally {
+      setUpdatingDuplicateId(null);
+    }
+  };
+
+  const handleDismissDuplicate = async (dup) => {
+    if (!dup?._id) return;
+    setUpdatingDuplicateId(dup._id);
+    try {
+      await api.put(`/admin/complaints/${dup._id}/duplicate`, {
+        isDuplicate: false,
+        duplicateOf: null,
+        duplicateConfidence: 0
+      });
+      showToast('Duplicate flag dismissed — complaint is marked independent');
+      await fetchDuplicateGroups();
+      await fetchData();
+      if (detailsComplaint && detailsComplaint._id === dup._id) {
+        setDetailsComplaint(prev => ({ ...prev, isDuplicate: false, duplicateConfidence: 0, duplicateOf: null }));
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to dismiss duplicate flag', 'error');
+    } finally {
+      setUpdatingDuplicateId(null);
     }
   };
 
@@ -1141,7 +1222,7 @@ export default function AdminDashboard() {
     const token = localStorage.getItem('token');
     if (!token || !user) return;
 
-    const eventSource = new EventSource(`http://localhost:5000/api/notifications/stream?token=${token}`);
+    const eventSource = new EventSource(`https://gramconnect-backend.vercel.app/api/notifications/stream?token=${token}`);
 
     eventSource.addEventListener('notification', (event) => {
       try {
@@ -1172,6 +1253,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'dashboard' || activeTab === 'complaints') {
       fetchNotifications();
+    }
+    if (activeTab === 'duplicates') {
+      fetchDuplicateGroups();
     }
     if (activeTab === 'users') {
       fetchUsers();
@@ -1537,8 +1621,9 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (activeTab === 'dashboard' || activeTab === 'complaints') {
+    if (activeTab === 'dashboard' || activeTab === 'complaints' || activeTab === 'duplicates') {
       fetchData();
+      fetchDuplicateGroups();
     }
   }, [activeTab]);
 
@@ -1551,6 +1636,9 @@ export default function AdminDashboard() {
   const handleRefresh = () => {
     if (activeTab === 'complaint-details' && viewingComplaintId) {
       fetchComplaintDetails(viewingComplaintId);
+    } else if (activeTab === 'duplicates') {
+      fetchDuplicateGroups();
+      fetchData();
     } else {
       fetchData();
     }
@@ -1900,6 +1988,18 @@ export default function AdminDashboard() {
             <span>Complaints</span>
           </button>
           <button
+            className={`sidebar-item ${activeTab === 'duplicates' ? 'active' : ''}`}
+            onClick={() => { window.location.hash = '#admin/duplicates'; setActiveTab('duplicates'); setSidebarOpen(false); }}
+          >
+            <ShieldCheck size={18} strokeWidth={1.8} />
+            <span>Duplicates</span>
+            {duplicateGroups.length > 0 && (
+              <span style={{ marginLeft: 'auto', background: '#f59e0b', color: '#fff', fontSize: '0.68rem', fontWeight: 800, padding: '2px 7px', borderRadius: '10px' }}>
+                {duplicateGroups.length}
+              </span>
+            )}
+          </button>
+          <button
             className={`sidebar-item ${activeTab === 'users' ? 'active' : ''}`}
             onClick={() => { window.location.hash = '#admin/users'; setActiveTab('users'); setSidebarOpen(false); }}
           >
@@ -2205,7 +2305,7 @@ export default function AdminDashboard() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 {u.profilePicture ? (
                                   <img
-                                    src={u.profilePicture.startsWith('http') ? u.profilePicture : `http://localhost:5000${u.profilePicture}`}
+                                    src={u.profilePicture.startsWith('http') ? u.profilePicture : `https://gramconnect-backend.vercel.app${u.profilePicture}`}
                                     alt={u.fullName}
                                     style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
                                   />
@@ -2424,7 +2524,7 @@ export default function AdminDashboard() {
               ) : (
                 <div className="community-grid">
                   {filteredPosts.map(post => {
-                    const postImage = post.image ? (post.image.startsWith('http') ? post.image : `http://localhost:5000${post.image}`) : null;
+                    const postImage = post.image ? (post.image.startsWith('http') ? post.image : `https://gramconnect-backend.vercel.app${post.image}`) : null;
                     return (
                       <div key={post._id} className="post-card">
                         {postImage ? (
@@ -2623,7 +2723,7 @@ export default function AdminDashboard() {
                     <tbody>
                       {filteredItems.map(item => {
                         const isLost = item.type === 'Lost';
-                        const itemImage = item.image ? (item.image.startsWith('http') ? item.image : `http://localhost:5000${item.image}`) : null;
+                        const itemImage = item.image ? (item.image.startsWith('http') ? item.image : `https://gramconnect-backend.vercel.app${item.image}`) : null;
                         return (
                           <tr key={item._id}>
                             <td style={{ paddingLeft: '24px' }}>
@@ -3156,7 +3256,7 @@ export default function AdminDashboard() {
               {/* VIEW DETAILS OVERLAY MODAL */}
               {annDetailsOpen && selectedAnnItem && (() => {
                 const priorityStyle = annFormPriority === 'Urgent' ? { background: '#fee2e2', color: '#ef4444' } : annFormPriority === 'Important' ? { background: '#fffbeb', color: '#b45309' } : { background: 'var(--bg-card-hover)', color: 'var(--text-secondary)' };
-                const attachmentImage = selectedAnnItem.attachment ? (selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `http://localhost:5000${selectedAnnItem.attachment}`) : null;
+                const attachmentImage = selectedAnnItem.attachment ? (selectedAnnItem.attachment.startsWith('http') ? selectedAnnItem.attachment : `https://gramconnect-backend.vercel.app${selectedAnnItem.attachment}`) : null;
                 return (
                   <div className="admin-modal-overlay" onClick={() => setAnnDetailsOpen(false)}>
                     <div className="admin-modal-container" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '650px' }}>
@@ -4092,6 +4192,29 @@ export default function AdminDashboard() {
                   <span className="stat-label">Total Users</span>
                 </div>
               </div>
+              <div
+                className="stat-card"
+                onClick={() => { window.location.hash = '#admin/duplicates'; setActiveTab('duplicates'); }}
+                style={{ cursor: 'pointer', border: duplicateGroups.length > 0 ? '1px solid #fde68a' : undefined }}
+                title="Click to view Duplicate Complaints"
+              >
+                <span className="stat-accent" style={{ background: '#d97706' }} />
+                <div className="stat-info">
+                  {loadingDuplicates ? (
+                    <span className="skeleton-text-lg" />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="stat-number">{duplicateGroups.length}</span>
+                      {duplicateGroups.length > 0 && (
+                        <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '6px', fontWeight: 800 }}>
+                          Review
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <span className="stat-label">Duplicate Groups</span>
+                </div>
+              </div>
             </div>
 
             <div className="dashboard-grid-2col">
@@ -4511,7 +4634,20 @@ export default function AdminDashboard() {
                     ) : (
                       currentComplaints.map((c) => (
                         <tr key={c._id}>
-                          <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{c.complaintId}</td>
+                          <td style={{ fontWeight: 800, color: 'var(--primary)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>{c.complaintId}</span>
+                              {c.isDuplicate ? (
+                                <span title={`Duplicate (${Math.round((c.duplicateConfidence || 0) * 100)}%)`} style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                  ⚠ Dup
+                                </span>
+                              ) : c.duplicateConfidence >= 0.5 ? (
+                                <span title={`Possible duplicate (${Math.round((c.duplicateConfidence || 0) * 100)}%)`} style={{ background: '#fff7ed', color: '#c2410c', fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                  ? Sim
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
                           <td>
                             {c.anonymous ? (
                               <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic', fontWeight: 600 }}>Anonymous</span>
@@ -5077,7 +5213,35 @@ export default function AdminDashboard() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Possible Duplicate Complaint</span>
-                      <span className="insight-pill danger" style={{ alignSelf: 'flex-start' }}>0 Found within 1km</span>
+                      <span className={`insight-pill ${detailsComplaint.isDuplicate ? 'danger' : 'success'}`} style={{ alignSelf: 'flex-start' }}>
+                        {detailsComplaint.isDuplicate
+                          ? (detailsComplaint.duplicateOf?.complaintId
+                              ? `Duplicate of ${detailsComplaint.duplicateOf.complaintId} (${Math.round((detailsComplaint.duplicateConfidence || 0) * 100)}%)`
+                              : `Likely Duplicate (${Math.round((detailsComplaint.duplicateConfidence || 0) * 100)}%)`)
+                          : 'None Detected'}
+                      </span>
+                      {(detailsComplaint.isDuplicate || detailsComplaint.duplicateConfidence >= 0.5 || detailsComplaint.duplicateOf) && (
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                          <button
+                            type="button"
+                            className="admin-btn primary"
+                            disabled={updatingDuplicateId === detailsComplaint._id}
+                            style={{ fontSize: '0.68rem', padding: '3px 8px', background: '#b45309', borderColor: '#b45309' }}
+                            onClick={() => handleConfirmDuplicate(detailsComplaint, detailsComplaint.duplicateOf?._id || detailsComplaint.duplicateOf)}
+                          >
+                            {updatingDuplicateId === detailsComplaint._id ? 'Saving...' : '✓ Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn secondary"
+                            disabled={updatingDuplicateId === detailsComplaint._id}
+                            style={{ fontSize: '0.68rem', padding: '3px 8px' }}
+                            onClick={() => handleDismissDuplicate(detailsComplaint)}
+                          >
+                            ✕ Dismiss
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Suggested Action</span>
@@ -5110,6 +5274,233 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================== DUPLICATE COMPLAINTS TAB ==================== */}
+        {activeTab === 'duplicates' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid #edf2f7', paddingBottom: '16px' }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-dark, #1e293b)' }}>
+                  Duplicate Complaints Management
+                </h1>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary, #64748b)' }}>
+                  AI-flagged similar and duplicate complaints across all Gram Panchayats — review and confirm or dismiss
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="admin-btn secondary"
+                  onClick={fetchDuplicateGroups}
+                  disabled={loadingDuplicates}
+                  style={{ gap: '6px', fontSize: '0.82rem' }}
+                >
+                  <RefreshCw size={14} className={loadingDuplicates ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Loading state */}
+            {loadingDuplicates ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px', gap: '12px' }}>
+                <span style={{ width: '36px', height: '36px', border: '3px solid #f59e0b', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'lineDash 1s linear infinite' }} />
+                <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Loading duplicate complaint records...</span>
+              </div>
+            ) : duplicateError ? (
+              <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #fecaca', padding: '48px 24px', textAlign: 'center', color: '#94a3b8' }}>
+                <AlertTriangle size={40} style={{ marginBottom: '12px', color: '#ef4444', opacity: 0.8 }} />
+                <p style={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Failed to load duplicate complaints</p>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '16px' }}>{duplicateError}</p>
+                <button className="admin-btn primary" onClick={fetchDuplicateGroups} style={{ margin: '0 auto' }}>Try Again</button>
+              </div>
+            ) : duplicateGroups.length === 0 ? (
+              <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '64px 24px', textAlign: 'center', color: '#94a3b8' }}>
+                <CheckCircle2 size={44} style={{ marginBottom: '12px', opacity: 0.5, color: '#10b981' }} />
+                <p style={{ fontWeight: 700, color: '#1e293b', fontSize: '1.05rem', margin: 0 }}>No duplicate complaints detected</p>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '6px' }}>
+                  The AI duplicate detection engine has not flagged any duplicate complaints across Panchayats.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {duplicateGroups.map((group, gi) => (
+                  <div
+                    key={group.primaryId || gi}
+                    style={{
+                      background: '#fff',
+                      borderRadius: '16px',
+                      border: '2px solid #fef3c7',
+                      padding: '22px',
+                      boxShadow: '0 4px 16px rgba(245,158,11,0.06)'
+                    }}
+                  >
+                    {/* Group header */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '18px', borderBottom: '1px solid #fef3c7', paddingBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.72rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          ⚠ Duplicate Group #{gi + 1}
+                        </span>
+                        {group.duplicates?.length > 0 && (
+                          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                            {group.duplicates.length} duplicate candidate{group.duplicates.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      {(group.primaryComplaint?.panchayatId?.name || group.primaryComplaint?.district) && (
+                        <span style={{ fontSize: '0.75rem', color: '#475569', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px', fontWeight: 700 }}>
+                          📍 {group.primaryComplaint.panchayatId?.name || 'Local'} ({group.primaryComplaint.district || 'Kerala'})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Original / Primary complaint */}
+                    {group.primaryComplaint ? (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            ✓ Original Complaint (Primary)
+                          </span>
+                          <span className="status-pill" style={{ ...getStatusBadgeStyle(group.primaryComplaint.status), fontWeight: 700, padding: '3px 10px', borderRadius: '8px', fontSize: '0.72rem' }}>
+                            {group.primaryComplaint.status}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b' }}>
+                              {group.primaryComplaint.title}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '4px' }}>
+                              ID: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>{group.primaryComplaint.complaintId}</span>
+                              &nbsp;·&nbsp;<span style={{ fontWeight: 600 }}>{group.primaryComplaint.category}</span>
+                              {group.primaryComplaint.user && !group.primaryComplaint.anonymous && (
+                                <>&nbsp;·&nbsp;Citizen: <span style={{ fontWeight: 600 }}>{group.primaryComplaint.user.fullName}</span></>
+                              )}
+                              {group.primaryComplaint.anonymous && <>&nbsp;·&nbsp;<em>Anonymous</em></>}
+                              &nbsp;·&nbsp;📍 {group.primaryComplaint.city || group.primaryComplaint.ward || group.primaryComplaint.district || 'Local Area'}
+                              {group.primaryComplaint.panchayatId?.name && ` (${group.primaryComplaint.panchayatId.name})`}
+                            </div>
+                          </div>
+                          <button
+                            className="admin-btn secondary"
+                            onClick={() => { window.location.hash = `#admin/complaints/${group.primaryComplaint._id}`; }}
+                            style={{ fontSize: '0.75rem', padding: '5px 10px', height: 'fit-content' }}
+                          >
+                            <Eye size={13} style={{ marginRight: '4px' }} /> View Report
+                          </button>
+                        </div>
+                        {group.primaryComplaint.description && (
+                          <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '8px', lineHeight: 1.5, background: 'rgba(255,255,255,0.7)', padding: '8px 12px', borderRadius: '8px' }}>
+                            {group.primaryComplaint.description}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '8px' }}>
+                          Reported: {new Date(group.primaryComplaint.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '12px', padding: '12px', marginBottom: '16px', color: '#64748b', fontSize: '0.8rem' }}>
+                        Original complaint record unassigned or removed.
+                      </div>
+                    )}
+
+                    {/* Suspected / Confirmed Duplicate complaints */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Suspected Duplicate Reports:
+                      </div>
+                      {group.duplicates?.map((dup, di) => (
+                        <div
+                          key={dup._id || di}
+                          style={{
+                            background: dup.isDuplicate ? '#fff7ed' : '#f8fafc',
+                            border: `1px solid ${dup.isDuplicate ? '#fed7aa' : '#e2e8f0'}`,
+                            borderRadius: '12px',
+                            padding: '16px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.72rem', color: dup.isDuplicate ? '#c2410c' : '#b45309', fontWeight: 800, textTransform: 'uppercase' }}>
+                                {dup.isDuplicate ? '⚠ Confirmed Duplicate' : '? Suspected Duplicate'}
+                              </span>
+                              {dup.duplicateConfidence > 0 && (
+                                <span style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>
+                                  {Math.round(dup.duplicateConfidence * 100)}% Match
+                                </span>
+                              )}
+                              {dup.distanceMeters != null && (
+                                <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.7rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px' }}>
+                                  ~{dup.distanceMeters}m away
+                                </span>
+                              )}
+                            </div>
+                            <span className="status-pill" style={{ ...getStatusBadgeStyle(dup.status), fontWeight: 700, padding: '3px 10px', borderRadius: '8px', fontSize: '0.72rem' }}>
+                              {dup.status}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
+                                {dup.title}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '4px' }}>
+                                ID: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>{dup.complaintId}</span>
+                                &nbsp;·&nbsp;<span style={{ fontWeight: 600 }}>{dup.category}</span>
+                                {dup.user && !dup.anonymous && (
+                                  <>&nbsp;·&nbsp;Citizen: <span style={{ fontWeight: 600 }}>{dup.user.fullName}</span></>
+                                )}
+                                {dup.anonymous && <>&nbsp;·&nbsp;<em>Anonymous</em></>}
+                                &nbsp;·&nbsp;📍 {dup.city || dup.ward || dup.district || 'Local Area'}
+                                {dup.panchayatId?.name && ` (${dup.panchayatId.name})`}
+                              </div>
+                              {dup.description && (
+                                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px', lineHeight: 1.5 }}>
+                                  {dup.description.slice(0, 200)}{dup.description.length > 200 ? '…' : ''}
+                                </div>
+                              )}
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '6px' }}>
+                                Submitted: {new Date(dup.createdAt).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action buttons — BOTH Confirm Duplicate AND Dismiss are rendered */}
+                          <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button
+                              disabled={updatingDuplicateId === dup._id}
+                              onClick={() => handleConfirmDuplicate(dup, group.primaryId)}
+                              className="admin-btn primary"
+                              style={{ fontSize: '0.78rem', padding: '7px 14px', background: '#b45309', borderColor: '#b45309', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              {updatingDuplicateId === dup._id ? 'Saving...' : '✓ Confirm Duplicate'}
+                            </button>
+                            <button
+                              disabled={updatingDuplicateId === dup._id}
+                              onClick={() => handleDismissDuplicate(dup)}
+                              className="admin-btn secondary"
+                              style={{ fontSize: '0.78rem', padding: '7px 14px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              {updatingDuplicateId === dup._id ? 'Saving...' : '✕ Dismiss Flag'}
+                            </button>
+                            <button
+                              onClick={() => { window.location.hash = `#admin/complaints/${dup._id}`; }}
+                              className="admin-btn secondary"
+                              style={{ fontSize: '0.78rem', padding: '7px 14px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <Eye size={13} /> View Details
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -5223,7 +5614,7 @@ export default function AdminDashboard() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'var(--bg-card-hover)', borderRadius: '12px', marginBottom: '16px' }}>
                       {selectedUserDetails.profilePicture ? (
                         <img
-                          src={selectedUserDetails.profilePicture.startsWith('http') ? selectedUserDetails.profilePicture : `http://localhost:5000${selectedUserDetails.profilePicture}`}
+                          src={selectedUserDetails.profilePicture.startsWith('http') ? selectedUserDetails.profilePicture : `https://gramconnect-backend.vercel.app${selectedUserDetails.profilePicture}`}
                           alt={selectedUserDetails.fullName}
                           style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover' }}
                         />
@@ -5364,7 +5755,7 @@ export default function AdminDashboard() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid #edf2f7' }}>
                   {selectedPostDetails.user?.profilePicture ? (
                     <img
-                      src={selectedPostDetails.user.profilePicture.startsWith('http') ? selectedPostDetails.user.profilePicture : `http://localhost:5000${selectedPostDetails.user.profilePicture}`}
+                      src={selectedPostDetails.user.profilePicture.startsWith('http') ? selectedPostDetails.user.profilePicture : `https://gramconnect-backend.vercel.app${selectedPostDetails.user.profilePicture}`}
                       alt={selectedPostDetails.user?.fullName}
                       style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }}
                     />
@@ -5390,7 +5781,7 @@ export default function AdminDashboard() {
                   {selectedPostDetails.image && (
                     <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
                       <img
-                        src={selectedPostDetails.image.startsWith('http') ? selectedPostDetails.image : `http://localhost:5000${selectedPostDetails.image}`}
+                        src={selectedPostDetails.image.startsWith('http') ? selectedPostDetails.image : `https://gramconnect-backend.vercel.app${selectedPostDetails.image}`}
                         alt="Community Post"
                         style={{ width: '100%', maxHeight: '350px', objectFit: 'contain', background: 'var(--bg-card-hover)' }}
                       />
@@ -5550,7 +5941,7 @@ export default function AdminDashboard() {
                 <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', background: 'var(--bg-card-hover)', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1' }}>
                   {selectedLostFoundItem?.image ? (
                     <img
-                      src={selectedLostFoundItem.image.startsWith('http') ? selectedLostFoundItem.image : `http://localhost:5000${selectedLostFoundItem.image}`}
+                      src={selectedLostFoundItem.image.startsWith('http') ? selectedLostFoundItem.image : `https://gramconnect-backend.vercel.app${selectedLostFoundItem.image}`}
                       alt={selectedLostFoundItem.itemName || 'Item'}
                       style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                     />

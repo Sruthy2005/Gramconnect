@@ -112,7 +112,7 @@ export default function UserCommunityHub() {
   const getFullImageUrl = (imgUrl) => {
     if (!imgUrl) return 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=600';
     if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) return imgUrl;
-    return `http://localhost:5000${imgUrl}`;
+    return `https://gramconnect-backend.vercel.app${imgUrl}`;
   };
 
   const handleOpenEditModal = (post) => {

@@ -96,14 +96,36 @@ const createComplaint = asyncHandler(async (req, res) => {
   }
 
   // AI-based Duplicate Complaint Detection
-  const duplicateCheck = await checkDuplicateComplaint({
-    title: title.trim(),
-    description: description.trim(),
-    category: finalCategory,
-    latitude: parsedLat,
-    longitude: parsedLng,
-    district: district.trim()
-  });
+  let duplicateCheck = {
+    isDuplicate: false,
+    isPossibleDuplicate: false,
+    matchLevel: 'none',
+    confidence: 0,
+    duplicateOf: null,
+    matchedComplaint: null
+  };
+
+  try {
+    duplicateCheck = await checkDuplicateComplaint({
+      title: title.trim(),
+      description: description.trim(),
+      category: finalCategory,
+      latitude: parsedLat,
+      longitude: parsedLng,
+      district: district.trim(),
+      city: city ? city.trim() : '',
+      ward: ward ? ward.trim() : '',
+      // panchayatId is set after panchayatMatch lookup – use localBody+district for now,
+      // actual panchayat scoping happens at the panchayatMatch step below.
+      // We pass it here for pre-save check; fallback to district if not yet resolved.
+    });
+  } catch (dupErr) {
+    console.warn('[AI Duplicate Detector] Non-blocking error during duplicate check:', dupErr.message);
+  }
+
+  // isConfirmed flag – set when citizen explicitly chooses to submit despite duplicate warning
+  const isConfirmed = req.body.overrideDuplicate === 'true' || req.body.overrideDuplicate === true ||
+                      req.body.confirmDuplicate === 'true' || req.body.confirmDuplicate === true;
 
   // Anti-spam guard: prevent duplicate submissions within 10 seconds (Requirement 13)
   const tenSecondsAgo = new Date(Date.now() - 10000);
@@ -163,6 +185,45 @@ const createComplaint = asyncHandler(async (req, res) => {
 
   if (!panchayatMatch) {
     return res.status(400).json({ message: `Selected Panchayat/local body '${localBody}' in district '${district}' does not exist.` });
+  }
+
+  // Re-run duplicate check scoped to the resolved panchayat (overrides the earlier district-scoped check)
+  if (!isConfirmed) {
+    try {
+      const scopedDupCheck = await checkDuplicateComplaint({
+        title: title.trim(),
+        description: description.trim(),
+        category: finalCategory,
+        latitude: parsedLat,
+        longitude: parsedLng,
+        district: district.trim(),
+        city: city ? city.trim() : '',
+        ward: ward ? ward.trim() : '',
+        panchayatId: panchayatMatch._id
+      });
+      // Merge: take the higher-confidence result
+      if (scopedDupCheck.confidence > duplicateCheck.confidence) {
+        duplicateCheck = scopedDupCheck;
+      }
+    } catch (dupErr2) {
+      console.warn('[AI Duplicate Detector] Panchayat-scoped check error:', dupErr2.message);
+    }
+
+    if ((duplicateCheck.isDuplicate || duplicateCheck.isPossibleDuplicate) && duplicateCheck.matchedComplaint) {
+      return res.status(409).json({
+        success: false,
+        requiresConfirmation: true,
+        message: duplicateCheck.matchLevel === 'definite'
+          ? 'A very similar complaint was already reported nearby.'
+          : 'A possible matching complaint was found in this locality.',
+        isDuplicate: duplicateCheck.isDuplicate,
+        isPossibleDuplicate: duplicateCheck.isPossibleDuplicate,
+        matchLevel: duplicateCheck.matchLevel,
+        confidence: duplicateCheck.confidence,
+        matchedComplaint: duplicateCheck.matchedComplaint,
+        duplicateOf: duplicateCheck.duplicateOf
+      });
+    }
   }
 
   // Create complaint
@@ -240,6 +301,8 @@ const createComplaint = asyncHandler(async (req, res) => {
     aiConfidence: detectedConfidence,
     category: finalCategory,
     isDuplicate: duplicateCheck.isDuplicate,
+    isPossibleDuplicate: duplicateCheck.isPossibleDuplicate,
+    matchLevel: duplicateCheck.matchLevel,
     duplicateOf: duplicateCheck.duplicateOf,
     duplicateConfidence: duplicateCheck.confidence,
     matchedDuplicate: duplicateCheck.matchedComplaint,
@@ -251,20 +314,50 @@ const createComplaint = asyncHandler(async (req, res) => {
 // @route   POST /api/issues/check-duplicate
 // @access  Private
 const previewDuplicateCheck = asyncHandler(async (req, res) => {
-  const { title = '', description = '', category = '', latitude, longitude, district = '' } = req.body;
-  const duplicateResult = await checkDuplicateComplaint({
-    title,
-    description,
-    category,
+  const {
+    title = '',
+    description = '',
+    category = '',
     latitude,
     longitude,
-    district
-  });
+    district = '',
+    city = '',
+    ward = '',
+    panchayatId = null
+  } = req.body;
 
-  res.status(200).json({
-    success: true,
-    ...duplicateResult
-  });
+  try {
+    const duplicateResult = await checkDuplicateComplaint({
+      title,
+      description,
+      category,
+      latitude,
+      longitude,
+      district,
+      city,
+      ward,
+      panchayatId
+    });
+
+    res.status(200).json({
+      success: true,
+      ...duplicateResult
+    });
+  } catch (err) {
+    console.warn('[AI Duplicate Detector] Preview duplicate check error fallback:', err.message);
+    res.status(200).json({
+      success: true,
+      isDuplicate: false,
+      isPossibleDuplicate: false,
+      matchLevel: 'none',
+      confidence: 0,
+      duplicateOf: null,
+      similarity: 0,
+      distanceMeters: null,
+      factors: { semanticSimilarity: 0, geoProximityScore: 0, categoryScore: 0, recencyScore: 0 },
+      matchedComplaint: null
+    });
+  }
 });
 
 // @desc    Real-time AI categorization preview
